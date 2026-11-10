@@ -5,16 +5,17 @@
 [![Language](https://img.shields.io/badge/Language-Portugu%C3%AAs%20do%20Brasil%20(PT--BR)-green.svg)]()
 [![License](https://img.shields.io/badge/License-Apache%202.0-orange.svg)](LICENSE)
 
-Este repositório contém os adaptadores **QLoRA**, os scripts de treinamento, os datasets curados e as ferramentas de fusão de pesos (*weight merge*) para capacitar o modelo **NVIDIA Dory 1.0 4B** (`nvidia/NVIDIA-Nemotron-Labs-Dory1.0-4B-BF16`) a compreender e responder com alta fluência e precisão em **Português do Brasil (PT-BR)**, com tom direto, objetivo e sem censuras ou recusas moralistas desnecessárias, mantendo excelência em programação e raciocínio lógico.
+Este repositório contém os adaptadores **QLoRA**, os scripts de treinamento, os datasets curados, o **Agente Autônomo em Rust Nativo**, a interface Web de chat interativo e as ferramentas de fusão de pesos (*weight merge*) para capacitar o modelo **NVIDIA Dory 1.0 4B** (`nvidia/NVIDIA-Nemotron-Labs-Dory1.0-4B-BF16`) a compreender e responder com alta fluência e precisão em **Português do Brasil (PT-BR)**, com tom direto, objetivo e sem censuras ou recusas moralistas desnecessárias, mantendo excelência em programação e raciocínio lógico.
 
 ---
 
 ## 🌟 Destaques do Projeto
 
-- **Arquitetura nGPT com Projeção na Hiperesfera Unitária:** O Dory 1.0 utiliza normalização de pesos dinâmica (*Normalized Transformer*). O repositório inclui a implementação matemática exata para mesclar os adaptadores LoRA de volta à hiperesfera unitária sem degradar a decodificação autorregressiva.
-- **Treinado em 420 Passos (~2.188 Épocas):** Convergência suave e estável, reduzindo a perda de validação cega (*eval_loss*) para **3.702**.
-- **Equilíbrio Contra Esquecimento Catastrófico:** O dataset mistura instruções gerais em PT-BR, códigos e erros técnicos em português, prompts informais sem pontuação (*noisy prompts*) e tarefas de lógica/tool-use em inglês do modelo original (*experience replay*).
-- **Leve e Rápido:** Executa com apenas **~3.5 GB de VRAM** em 4-bit (bitsandbytes) ou **~7.95 GB de VRAM** em BF16 nativo (100% suportado em GPUs com 8GB a 12GB de VRAM, como RTX 3060, 4060, 4070, etc.).
+- **Agente Autônomo Seguro em Rust Nativo (`crates/dory-agent`):** Ferramenta de linha de comando compilada em Rust que conecta na API local do Dory e permite ao modelo inspecionar diretórios, ler arquivos, criar código e executar comandos de terminal com **confirmação prévia de segurança `(S/N)` obrigatória**.
+- **Interface Web Moderna Integrada:** Chat visual no navegador (`http://localhost:8000`) com tema escuro, alternador entre resposta rápida e raciocínio estendido (`<think>`), chips de sugestões rápidas e visualizador de pensamentos colapsável.
+- **Arquitetura nGPT com Projeção na Hiperesfera Unitária:** O Dory 1.0 utiliza normalização de pesos dinâmica (*Normalized Transformer* com `justnorm`). O repositório inclui a implementação matemática oficial para manter estabilidade numérica total e mesclar os adaptadores LoRA de volta à hiperesfera unitária sem divergência de gradiente.
+- **Otimização de Latência e Streaming:** Configurado por padrão em 2 passadas de loop recorrente (`n_recurrent_loops: 2`) e exibição em tempo real de tokens e raciocínio no terminal com métricas de velocidade (`tok/s`).
+- **Leve e Eficiente:** Executa com apenas **~3.5 GB de VRAM** em 4-bit (bitsandbytes) ou **~7.95 GB de VRAM** em BF16 nativo (100% suportado em GPUs com 8GB a 12GB de VRAM, como RTX 3060, 4060, 4070, etc.).
 
 ---
 
@@ -36,28 +37,32 @@ Este repositório contém os adaptadores **QLoRA**, os scripts de treinamento, o
 ```text
 ├── data/
 │   └── final/
-│       ├── train.jsonl             # 3.071 exemplos de treino balanceados
-│       └── eval.jsonl              # 342 exemplos de validação cega
+│       ├── train.jsonl             # Exemplos de treino balanceados em PT-BR
+│       └── eval.jsonl              # Exemplos de validação cega
 ├── models/
 │   └── dory-lora-ptbr/             # Adaptadores LoRA finais (Passo 420)
 │       ├── adapter_config.json
 │       ├── adapter_model.safetensors
-│       ├── chat_template.jinja
+│       ├── chat_template.jinja     # Template oficial NVIDIA com suporte a <think> e ferramentas
 │       ├── tokenizer.json
 │       ├── tokenizer_config.json
 │       └── trainer_state.json      # Histórico completo de métricas
-├── crates/                         # Utilitários de dados em Rust de alta performance
+├── crates/                         # Utilitários de dados e agentes em Rust
+│   ├── dory-agent/                 # Agente Autônomo CLI em Rust (Ferramentas de sistema seguras)
 │   ├── crawler-curator/            # Crawler concorrente para dados PT-BR
 │   └── dataset-curator/            # Deduplicador e gerador de noisy prompts
-├── python/                         # Scripts de ML e Inferência
-│   ├── modeling_dory.py            # Definição arquitetural compatível com HF
-│   ├── train_lora_dory.py          # Script de fine-tuning QLoRA (NF4)
+├── python/                         # Scripts de ML, Servidor e Inferência
+│   ├── modeling_dory.py            # Definição arquitetural nGPT compatível com Transformers
+│   ├── train_qlora_dory.py         # Script de fine-tuning QLoRA (NF4)
 │   ├── merge_ngpt_dory.py          # Fusão LoRA + Projeção Hiperesférica nGPT
-│   ├── chat_dory.py                # Chat interativo CLI
-│   ├── serve_dory.py               # Servidor local compatível com API OpenAI
+│   ├── chat_dory.py                # Chat interativo CLI com streaming em tempo real
+│   ├── serve_dory.py               # Servidor Web local + API compatível com OpenAI
+│   ├── agente_dory.py              # Versão alternativa em Python do Agente Autônomo
 │   └── requirements.txt            # Dependências Python
-├── iniciar_chat.bat                # Inicializador 1-clique para Windows (Chat)
-├── iniciar_servidor_api.bat        # Inicializador 1-clique para Windows (API Local)
+├── iniciar_chat.bat                # Inicializador 1-clique (Chat Terminal)
+├── iniciar_chat_web.bat            # Inicializador 1-clique (Interface Web + API)
+├── iniciar_servidor_api.bat        # Inicializador 1-clique (API Local Porta 8000)
+├── iniciar_agente_dory.bat         # Inicializador 1-clique (Agente Autônomo Dory)
 └── README.md
 ```
 
@@ -67,8 +72,9 @@ Este repositório contém os adaptadores **QLoRA**, os scripts de treinamento, o
 
 ### Requisitos Mínimos
 - **GPU:** NVIDIA com suporte a CUDA e no mínimo 8 GB de VRAM (recomendado 12 GB).
-- **RAM:** 16 GB ou mais (32 GB recomendado para o script de fusão de pesos na RAM).
+- **RAM:** 16 GB ou mais.
 - **Python:** 3.10, 3.11 ou 3.12.
+- **Rust / Cargo:** (Opcional, para compilar utilitários e agente em Rust).
 - **Git LFS:** Necessário para baixar os pesos binários (`git lfs install`).
 
 ### 1. Clonar o Repositório
@@ -94,63 +100,48 @@ pip install -r python/requirements.txt
 
 ## 💬 Como Usar
 
-### Opção 1: Chat Interativo no Terminal
-No Windows, basta dar dois cliques em `iniciar_chat.bat` ou executar:
+### 🌐 1. Interface Web Interativa (Recomendado)
+Para conversar com o Dory através de uma interface web moderna no navegador:
 ```bash
-python python/chat_dory.py
+iniciar_chat_web.bat
 ```
-
-### Opção 2: Servidor de API Local (Compatível com OpenAI)
-Inicia um servidor local na porta 8000 compatível com LM Studio, Open WebUI, Cursor, Continue e VS Code:
+Ou via terminal:
 ```bash
 python python/serve_dory.py
 ```
-Endpoint: `http://localhost:8000/v1`  
-Modelo: `dory-4b-ptbr`
+Acesse no seu navegador: `http://localhost:8000`
 
-### Opção 3: Carregamento Direto via Python / PEFT
-```python
-import torch
-from transformers import AutoTokenizer, BitsAndBytesConfig
-from peft import PeftModel
-from python.modeling_dory import DoryConfig, DoryForCausalLM
-
-base_model_id = "nvidia/NVIDIA-Nemotron-Labs-Dory1.0-4B-BF16"
-lora_path = "models/dory-lora-ptbr"
-
-tokenizer = AutoTokenizer.from_pretrained(lora_path)
-
-bnb_config = BitsAndBytesConfig(
-    load_in_4bit=True,
-    bnb_4bit_quant_type="nf4",
-    bnb_4bit_compute_dtype=torch.bfloat16,
-)
-
-model = DoryForCausalLM.from_pretrained(
-    base_model_id,
-    quantization_config=bnb_config,
-    device_map="cuda",
-    torch_dtype=torch.bfloat16,
-)
-
-model = PeftModel.from_pretrained(model, lora_path)
-model.eval()
-
-prompt = "Como funciona uma busca binária e qual a sua complexidade?"
-messages = [{"role": "user", "content": prompt}]
-inputs = tokenizer(tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True), return_tensors="pt").to("cuda")
-
-with torch.no_grad():
-    outputs = model.generate(**inputs, max_new_tokens=256, temperature=0.7, top_p=0.9, repetition_penalty=1.15)
-
-print(tokenizer.decode(outputs[0][inputs.input_ids.shape[1]:], skip_special_tokens=True))
+### 🤖 2. Agente Autônomo Dory (Manipulação de Arquivos e Terminal)
+O Agente Dory é capaz de raciocinar e interagir com o ambiente de desenvolvimento local usando ferramentas:
+```bash
+iniciar_agente_dory.bat
 ```
+Ou executando diretamente o binário em Rust:
+```bash
+crates/dory-agent/target/release/dory-agent.exe
+```
+> **Segurança:** Qualquer chamada para executar comandos de terminal exigirá confirmação explícita interativa `(S/N)` antes de ser disparada.
+
+### 🔌 3. Servidor de API Local (Compatível com OpenAI)
+Inicia um servidor local na porta 8000 compatível com LM Studio, Open WebUI, Cursor, Continue e VS Code:
+```bash
+iniciar_servidor_api.bat
+```
+- Endpoint: `http://localhost:8000/v1`
+- Modelo: `dory-4b-ptbr`
+
+### 💻 4. Chat Interativo no Terminal
+Para conversar diretamente via terminal com streaming token-a-token:
+```bash
+iniciar_chat.bat
+```
+*(Digite `/think` dentro do chat para alternar entre modo rápido e raciocínio profundo).*
 
 ---
 
 ## 🧬 Fusão de Pesos nGPT (Weight Merge)
 
-Para criar um modelo consolidado autônomo em BF16 sem precisar de PEFT em tempo de execução:
+Para consolidar os pesos LoRA e reconstruir o modelo mesclado autônomo em BF16:
 ```bash
 python python/merge_ngpt_dory.py
 ```
