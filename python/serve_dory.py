@@ -16,7 +16,7 @@ if os.path.exists(site_torch_lib) and hasattr(os, "add_dll_directory"):
 import torch
 from transformers import AutoTokenizer, configuration_utils, TextIteratorStreamer
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, StreamingResponse, Response
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import uvicorn
@@ -83,6 +83,7 @@ HTML_PAGE = """<!DOCTYPE html>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dory 1.0 4B PT-BR - Chat</title>
+    <link rel="icon" href="/favicon.ico">
     <style>
         :root {
             --bg-color: #0f172a;
@@ -297,6 +298,11 @@ class ChatCompletionRequest(BaseModel):
 def index():
     """Interface Web Interativa no Navegador"""
     return HTML_PAGE
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    svg_icon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🐟</text></svg>'
+    return Response(content=svg_icon, media_type="image/svg+xml")
 
 @app.get("/v1/models")
 def list_models():
