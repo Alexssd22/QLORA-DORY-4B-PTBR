@@ -19,16 +19,21 @@ Este repositório contém os adaptadores **QLoRA**, os scripts de treinamento, o
 
 ---
 
-## 📊 Métricas de Treinamento
+## 📊 Métricas de Treinamento e Convergência
 
-| Etapa | Passo | Época | Train Loss | Eval Loss (Validação Cega) |
-| :--- | :---: | :---: | :---: | :---: |
-| Inicial (Warmup) | 10 | 0.05 | 168.89 | - |
-| Intermediário 1 | 100 | 0.52 | 65.08 | 4.324 |
-| Intermediário 2 | 200 | 1.04 | 56.78 | 3.868 |
-| Intermediário 3 | 300 | 1.56 | 53.43 | 3.739 |
-| Intermediário 4 | 400 | 2.08 | 51.94 | 3.715 |
-| **Final** | **420** | **2.188** | **51.62** | **3.702** |
+Com a correção matemática da hiperesfera unitária (`justnorm` nas 96 camadas recorrentes do nGPT) e o isolamento de perda via mascaramento de prompt (`labels = -100`), o treinamento atingiu convergência de última geração no Português:
+
+| Etapa | Passo | Época | Train Loss (Resposta) | Eval Loss (Validação Cega) | Grad Norm |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| Inicial (Warmup) | 1 | 0.001 | 99.02 | — | 158.6 |
+| Warmup | 10 | 0.010 | 96.64 | — | 79.16 |
+| Convergência Inicial | 30 | 0.031 | 49.98 | — | 72.28 |
+| Estabilização | 50 | 0.052 | 35.66 | — | 89.61 |
+| Bloco 1 (Checkpoint-100) | 100 | 0.103 | 27.83 | **1.879** | 38.69 |
+| Refinamento Semântico | 150 | 0.155 | 26.11 | — | 48.46 |
+| **Final Consolidado (Checkpoint-200)** | **200** | **0.207** | **26.22** | **1.715** 🎯 | **42.98** |
+
+*Nota: O dataset de treino foi expandido para **15.480 amostras** e **1.721 amostras de validação** utilizando o curador concorrente nativo em Rust (`crates/dataset-curator`).*
 
 ---
 

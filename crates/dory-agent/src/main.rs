@@ -256,9 +256,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             content: user_input.to_string(),
         });
 
-        // Loop de resolução de tarefas do agente
+        // Loop de resolução de tarefas do agente (máximo 2 passadas para resposta rápida)
         let mut loop_count = 0;
-        let max_agent_turns = 10;
+        let max_agent_turns = 2;
 
         while loop_count < max_agent_turns {
             loop_count += 1;

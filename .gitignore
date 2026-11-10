@@ -20,8 +20,12 @@ crates/**/target/
 # Modelo mesclado completo de 8 GB (Reconstruível via python/merge_ngpt_dory.py)
 models/dory-4b-ptbr-merged/
 
-# Checkpoints intermediários redundantes do Hugging Face (mantém apenas o final dory-lora-ptbr)
+# Checkpoints intermediários e legado (mantém apenas o final dory-lora-ptbr)
 models/dory-lora-ptbr/checkpoint-*/
+models/dory-lora-ptbr-legacy/
+*.pt
+*.pth
+*.bin
 
 # Arquivos temporários
 *.tmp*

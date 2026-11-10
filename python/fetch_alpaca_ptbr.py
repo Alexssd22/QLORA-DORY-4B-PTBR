@@ -10,7 +10,7 @@ def main():
         ds = load_dataset("dominguesm/alpaca-data-pt-br", split="train")
         print(f"Total baixado: {len(ds)} exemplos.")
         
-        # Selecionar até 3.000 exemplos de alta qualidade para calibrar o treino < 2 horas
+        # Selecionar até 15.000 exemplos de alta qualidade para o treino expandido
         subset = []
         for row in ds:
             instruction = row.get("instruction", "").strip()
@@ -19,11 +19,15 @@ def main():
             
             if not instruction or not output_text:
                 continue
+
+            # Filtrar exemplos muito curtos ou vazios
+            if len(output_text) < 15 or len(instruction) < 5:
+                continue
             
             prompt = f"{instruction}\n{input_text}".strip() if input_text else instruction
             subset.append({"instruction": prompt, "output": output_text})
             
-            if len(subset) >= 3000:
+            if len(subset) >= 15000:
                 break
                 
         os.makedirs(os.path.dirname(OUTPUT_RAW), exist_ok=True)

@@ -161,7 +161,8 @@ def main():
             history.append({"role": "user", "content": user_input})
 
             turns = 0
-            while turns < 10:
+            # Máximo 2 passadas para resposta rápida solicitada pelo usuário
+            while turns < 2:
                 turns += 1
                 print("🤖 Dory pensando...", end="\r", flush=True)
 

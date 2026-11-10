@@ -83,11 +83,11 @@ def main():
     print(f"Modelo carregado na GPU! VRAM alocada: {torch.cuda.memory_allocated() / (1024**3):.2f} GB")
     model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=False)
 
-    # 3. Configurar LoRA
+    # 3. Configurar LoRA de Alta Precisão (Rank 32, Alpha 64)
     print("\n[4/5] Injetando Adaptadores LoRA...")
     target_modules = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
     peft_config = LoraConfig(
-        r=64,
+        r=32,
         lora_alpha=64,
         target_modules=target_modules,
         lora_dropout=0.05,
@@ -98,23 +98,34 @@ def main():
     model = get_peft_model(model, peft_config)
     model.print_trainable_parameters()
 
-    # 4. Carregar Datasets
-    print("\n[5/5] Preparando Datasets...")
+    # 4. Carregar Datasets e Aplicar Mascaramento de Prompt (Loss focado na Resposta)
+    print("\n[5/5] Preparando Datasets Expandidos (com mascaramento -100 no prompt)...")
     dataset = load_dataset("json", data_files={"train": TRAIN_DATA, "eval": EVAL_DATA})
 
     def tokenize_fn(batch):
-        formatted = [
-            tokenizer.apply_chat_template(m, tokenize=False, add_generation_prompt=False)
-            for m in batch["messages"]
-        ]
-        tokens = tokenizer(
-            formatted,
-            truncation=True,
-            max_length=2048,
-            padding=False,
-        )
-        tokens["labels"] = [list(ids) for ids in tokens["input_ids"]]
-        return tokens
+        all_input_ids = []
+        all_labels = []
+        for messages in batch["messages"]:
+            user_msgs = [m for m in messages if m["role"] != "assistant"]
+            prompt_text = tokenizer.apply_chat_template(
+                user_msgs, tokenize=False, add_generation_prompt=True, enable_thinking=False
+            )
+            full_text = tokenizer.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=False
+            )
+
+            p_ids = tokenizer(prompt_text, truncation=True, max_length=512)["input_ids"]
+            f_tokens = tokenizer(full_text, truncation=True, max_length=512)
+            f_ids = f_tokens["input_ids"]
+
+            p_len = min(len(p_ids), len(f_ids) - 1) if len(f_ids) > 1 else 0
+            # Mascarar o prompt com -100 para o loss ser calculado APENAS na resposta do assistente
+            labels = [-100] * p_len + f_ids[p_len:]
+
+            all_input_ids.append(f_ids)
+            all_labels.append(labels)
+
+        return {"input_ids": all_input_ids, "labels": all_labels}
 
     tokenized_dataset = dataset.map(
         tokenize_fn,
@@ -122,22 +133,23 @@ def main():
         remove_columns=dataset["train"].column_names,
     )
 
-    # 5. Argumentos de Treino (Continuação para mais 1 hora na RTX 4070)
+    # 5. Argumentos de Treino Seguros e Estáveis para Windows + RTX 4070
     training_args = TrainingArguments(
         output_dir=OUTPUT_DIR,
         per_device_train_batch_size=1,
         gradient_accumulation_steps=16,
-        learning_rate=3e-5,
+        learning_rate=1.5e-4,
         lr_scheduler_type="cosine",
-        warmup_steps=20,
-        weight_decay=0.0,
-        max_steps=420,
+        warmup_steps=30,
+        weight_decay=0.01,
+        max_steps=600,
         logging_steps=10,
+        logging_first_step=True,
         eval_strategy="steps",
-        eval_steps=50,
+        eval_steps=100,
         save_strategy="steps",
-        save_steps=50,
-        save_total_limit=3,
+        save_steps=100,
+        save_total_limit=2,
         bf16=True,
         optim="paged_adamw_8bit",
         report_to="none",
@@ -160,16 +172,11 @@ def main():
     )
 
     print("\n" + "=" * 60)
-    print("Iniciando loop de treinamento na RTX 4070...")
+    print("Iniciando loop de treinamento limpo na RTX 4070 (600 passos)...")
     print("=" * 60)
 
-    resume_ckpt = None
-    ckpt_300 = os.path.join(OUTPUT_DIR, "checkpoint-300")
-    if os.path.exists(ckpt_300):
-        resume_ckpt = ckpt_300
-        print(f"Retomando treinamento a partir de: {resume_ckpt}")
-
-    trainer.train(resume_from_checkpoint=resume_ckpt)
+    # Treino limpo a partir de inicialização pura (sem herdar checkpoints da matemática antiga)
+    trainer.train()
 
     print("\nTreinamento concluído com sucesso!")
     print(f"Salvando adaptadores LoRA em: {OUTPUT_DIR}")
