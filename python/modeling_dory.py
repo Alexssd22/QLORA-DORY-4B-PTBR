@@ -117,7 +117,9 @@ class DoryAttention(nn.Module):
         self.sqk = nn.Parameter(torch.ones(self.q_size))
         self.s_gate = nn.Parameter(torch.ones(self.q_size))
         self._sqk_factor = (self.head_dim ** 0.5) / std
-        g0 = config.attention_output_gate_logit_scale_init or (config.hidden_size ** 0.5)
+        g0 = config.attention_output_gate_logit_scale_init
+        if g0 is None:
+            g0 = config.hidden_size ** 0.5
         self._s_gate_factor = (g0 ** 0.5) / std
 
         is_full = (config.layer_types[layer_idx] == "full_attention") if config.layer_types else False
@@ -132,49 +134,62 @@ class DoryAttention(nn.Module):
         v = self.v_proj(hidden_states)
         g = self.g_proj(hidden_states)
 
-        q = q * (self.sqk.float() * self._sqk_factor).to(q.dtype)
+        # Reshape para aplicação de RoPE e GQA: [bsz, heads, q_len, head_dim]
         q = q.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         k = k.view(bsz, q_len, self.num_kv_heads, self.head_dim).transpose(1, 2)
         v = v.view(bsz, q_len, self.num_kv_heads, self.head_dim).transpose(1, 2)
 
-        q = justnorm(q, dim=-1)
-        k = justnorm(k, dim=-1)
-
+        # 1. RoPE aplicado antes do qk-norm (conforme especificação oficial NVIDIA)
         cos, sin = self.rotary_emb(v, q_len)
         q, k = apply_rotary_pos_emb(q, k, cos, sin)
 
+        # 2. nGPT qk-norm após RoPE: q escalonado por (sqk * f)^2 pós-justnorm, k com justnorm simples
+        # self.sqk possui shape [self.q_size] -> view [1, num_heads, 1, head_dim]
+        sqk = (self.sqk.float() * self._sqk_factor).view(1, self.num_heads, 1, self.head_dim)
+        q = (sqk.square() * justnorm(q, dim=-1).float()).to(q.dtype)
+        k = justnorm(k, dim=-1)
+
+        # 3. GQA repeat_interleave se num_heads != num_kv_heads
         if self.num_heads != self.num_kv_heads:
             n_rep = self.num_heads // self.num_kv_heads
             k = k.repeat_interleave(n_rep, dim=1)
             v = v.repeat_interleave(n_rep, dim=1)
 
+        # 4. Scaled dot-product attention
         attn_output = F.scaled_dot_product_attention(
             q, k, v, attn_mask=None, is_causal=True
         )
         attn_output = attn_output.transpose(1, 2).contiguous().view(bsz, q_len, self.q_size)
 
-        gate = torch.sigmoid(g.float() * (self.s_gate.float() * self._s_gate_factor)).to(attn_output.dtype)
+        # 5. Output gate: sigmoid(g * (s_gate * f)^2), depois justnorm na dimensão escondida
+        sg = (self.s_gate.float() * self._s_gate_factor).square().view(1, 1, self.q_size)
+        gate = torch.sigmoid(g.float() * sg).to(attn_output.dtype)
         attn_output = attn_output * gate
+        attn_output = justnorm(attn_output, dim=-1)
 
+        # 6. Projeção de saída
         return self.o_proj(attn_output)
 
 class DoryMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
-        std = config.initializer_range
-        self.gate_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
+        self.ffn = config.intermediate_size
+        self.gate_proj = nn.Linear(config.hidden_size, self.ffn, bias=False)
+        self.up_proj = nn.Linear(config.hidden_size, self.ffn, bias=False)
+        self.down_proj = nn.Linear(self.ffn, config.hidden_size, bias=False)
 
-        self.suv_gate = nn.Parameter(torch.ones(config.intermediate_size))
-        self.suv_up = nn.Parameter(torch.ones(config.intermediate_size))
-        self._suv_factor = 1.0 / std
+        self.suv_gate = nn.Parameter(torch.ones(self.ffn))
+        self.suv_up = nn.Parameter(torch.ones(self.ffn))
+        self._suv_factor = config.hidden_size ** 0.5
 
     def forward(self, x):
-        gate = self.gate_proj(x).float() * (self.suv_gate.float() * self._suv_factor)
-        up = self.up_proj(x).float() * (self.suv_up.float() * self._suv_factor)
-        act = (F.silu(gate) * up).to(x.dtype)
-        return self.down_proj(act)
+        g = self.gate_proj(x)
+        u = self.up_proj(x)
+        g = (g.float() * (self.suv_gate.float() * self._suv_factor)).to(g.dtype)
+        u = (u.float() * (self.suv_up.float() * self._suv_factor)).to(u.dtype)
+        m = (F.silu(g.float()) * u.float()).to(x.dtype)
+        m = justnorm(m, dim=-1)
+        return self.down_proj(m)
 
 class DoryDecoderLayer(nn.Module):
     def __init__(self, config, layer_idx):

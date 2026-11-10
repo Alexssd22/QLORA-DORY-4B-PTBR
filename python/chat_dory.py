@@ -1,6 +1,7 @@
 import os
 import sys
 import json
+import time
 import ctypes
 
 # Desativar QuickEdit mode no Windows CMD para evitar que o clique do mouse congele a execução
@@ -94,14 +95,24 @@ def main():
     # Streamer para exibir os tokens em tempo real na tela conforme são gerados
     streamer = TextStreamer(tokenizer, skip_prompt=True, skip_special_tokens=True)
 
+    enable_thinking = False
+    print("Dicas de uso:")
+    print(" - Digite '/think' para ligar/desligar o modo de raciocínio profundo (<think>).")
+    print(" - Digite 'sair' para encerrar o chat.\n")
+
     while True:
         try:
-            user_input = input("\nVocê: ").strip()
+            mode_label = "🧠 [Raciocínio ON]" if enable_thinking else "⚡ [Rápido (Loops=2)]"
+            user_input = input(f"\nVocê ({mode_label}): ").strip()
             if not user_input:
                 continue
             if user_input.lower() in ["sair", "exit", "quit"]:
                 print("Até logo!")
                 break
+            if user_input.lower() == "/think":
+                enable_thinking = not enable_thinking
+                print(f"Modo de raciocínio alterado para: {'ATIVADO (com <think>)' if enable_thinking else 'DESATIVADO (resposta rápida)'}")
+                continue
 
             history.append({"role": "user", "content": user_input})
 
@@ -109,27 +120,33 @@ def main():
                 history,
                 tokenize=False,
                 add_generation_prompt=True,
+                enable_thinking=enable_thinking,
             )
 
             inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
 
             print("\nDory: ", end="", flush=True)
 
+            t_start = time.time()
             with torch.no_grad():
                 output_tokens = model.generate(
                     **inputs,
                     streamer=streamer,
-                    max_new_tokens=512,
-                    temperature=0.7,
+                    max_new_tokens=384,
+                    temperature=0.6,
                     top_p=0.9,
-                    repetition_penalty=1.15,
+                    repetition_penalty=1.18,
                     no_repeat_ngram_size=3,
                     do_sample=True,
                     pad_token_id=tokenizer.eos_token_id,
                 )
+            t_elapsed = time.time() - t_start
 
             # Salvar no histórico
             generated_ids = output_tokens[0][inputs.input_ids.shape[1] :]
+            tok_speed = len(generated_ids) / max(t_elapsed, 0.001)
+            print(f"\n[⚡ {t_elapsed:.2f}s | {len(generated_ids)} tokens | {tok_speed:.1f} tok/s]")
+
             response = tokenizer.decode(generated_ids, skip_special_tokens=True).strip()
             if "</think>" in response:
                 response = response.split("</think>")[-1].strip()

@@ -14,7 +14,7 @@ if os.path.exists(site_torch_lib) and hasattr(os, "add_dll_directory"):
         pass
 
 import torch
-from transformers import AutoTokenizer, configuration_utils, TextIteratorStreamer
+from transformers import AutoTokenizer, configuration_utils, TextStreamer
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, StreamingResponse, Response
 from pydantic import BaseModel
@@ -142,6 +142,10 @@ HTML_PAGE = """<!DOCTYPE html>
             </div>
         </div>
         <div style="display: flex; gap: 12px; align-items: center;">
+            <label style="display:flex;align-items:center;gap:6px;font-size:0.8rem;color:var(--text-secondary);cursor:pointer;background:var(--card-bg);padding:4px 8px;border-radius:6px;border:1px solid var(--border-color);">
+                <input type="checkbox" id="toggle-think">
+                <span>🧠 Modo Raciocínio (&lt;think&gt;)</span>
+            </label>
             <span class="badge">● RTX 4070 Ativa</span>
             <button class="clear-btn" onclick="clearChat()">Limpar Chat</button>
         </div>
@@ -220,13 +224,17 @@ HTML_PAGE = """<!DOCTYPE html>
             // Criar balão do assistente com indicador de pensamento
             const botMsgEl = appendMessage('assistant', '');
             const botContentEl = botMsgEl.querySelector('.content');
-            botContentEl.innerHTML = '<span style="color:var(--text-secondary);font-style:italic;">Pensando... 💭</span><span class="cursor"></span>';
+            const thinkEnabled = document.getElementById('toggle-think') ? document.getElementById('toggle-think').checked : false;
+            botContentEl.innerHTML = `<span style="color:var(--accent);font-style:italic;">${thinkEnabled ? 'Raciocinando... 🧠' : 'Gerando resposta rápida (Loops=2)... ⚡'}</span><span class="cursor"></span>`;
 
             try {
                 const response = await fetch('/api/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ messages: chatHistory })
+                    body: JSON.stringify({
+                        messages: chatHistory,
+                        enable_thinking: thinkEnabled
+                    })
                 });
 
                 if (!response.ok) {
@@ -293,6 +301,7 @@ class ChatCompletionRequest(BaseModel):
     top_p: Optional[float] = 0.9
     max_tokens: Optional[int] = 256
     stream: Optional[bool] = False
+    enable_thinking: Optional[bool] = False
 
 @app.get("/", response_class=HTMLResponse)
 def index():
@@ -323,23 +332,55 @@ def list_models():
 def chat_completions(req: ChatCompletionRequest):
     try:
         msgs = [{"role": m.role, "content": m.content} for m in req.messages]
-        prompt = tokenizer.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True)
+        enable_think = bool(req.enable_thinking)
+
+        # Configurar prompt otimizado no chat_template oficial da NVIDIA
+        prompt = tokenizer.apply_chat_template(
+            msgs,
+            tokenize=False,
+            add_generation_prompt=True,
+            enable_thinking=enable_think,
+        )
         inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
+
+        user_snippet = msgs[-1]["content"][:60].replace("\n", " ") if msgs else ""
+        print("\n" + "-" * 60)
+        print(f"[⚡ Requisição Recebida] ({len(msgs)} mensagens)")
+        print(f"   Última mensagem: \"{user_snippet}...\"")
+        if enable_think:
+            print("   Modo: 🧠 Raciocínio Profundo (<think> ativado)")
+        else:
+            print("   Modo: ⚡ Resposta Direta Rápida (Loops=2)")
+        print("[💭 Progresso de Pensamento / Geração de Tokens no Terminal]:")
+        print("-" * 60, flush=True)
+
+        streamer = TextStreamer(tokenizer, skip_prompt=True, skip_special_tokens=False)
+        t_start = time.time()
 
         with torch.no_grad():
             output_tokens = model.generate(
                 **inputs,
+                streamer=streamer,
                 max_new_tokens=req.max_tokens or 256,
-                temperature=req.temperature or 0.7,
+                temperature=req.temperature or 0.6,
                 top_p=req.top_p or 0.9,
-                repetition_penalty=1.15,
+                repetition_penalty=1.18,
                 no_repeat_ngram_size=3,
                 do_sample=True,
                 pad_token_id=tokenizer.eos_token_id,
             )
 
+        t_elapsed = time.time() - t_start
         gen_ids = output_tokens[0][inputs.input_ids.shape[1]:]
-        resp_text = tokenizer.decode(gen_ids, skip_special_tokens=True).strip()
+        tok_speed = len(gen_ids) / max(t_elapsed, 0.001)
+
+        print("-" * 60)
+        print(f"[✅ Resposta Finalizada em {t_elapsed:.2f}s | {len(gen_ids)} tokens | {tok_speed:.1f} tokens/seg]")
+        print("-" * 60 + "\n", flush=True)
+
+        resp_text = tokenizer.decode(gen_ids, skip_special_tokens=False).strip()
+        # Se for para o cliente sem tags especiais desnecessárias, podemos limpar special tokens
+        clean_text = tokenizer.decode(gen_ids, skip_special_tokens=True).strip()
 
         return {
             "id": f"chatcmpl-{int(time.time())}",
@@ -351,7 +392,7 @@ def chat_completions(req: ChatCompletionRequest):
                     "index": 0,
                     "message": {
                         "role": "assistant",
-                        "content": resp_text,
+                        "content": clean_text if not ("<think>" in resp_text or "<tool_call>" in resp_text) else resp_text,
                     },
                     "finish_reason": "stop",
                 }
