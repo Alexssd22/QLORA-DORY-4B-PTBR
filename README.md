@@ -103,44 +103,20 @@ pip install -r python/requirements.txt
 
 ---
 
-## 💬 Como Usar
+## 💬 Como Usar: Inicialização Unificada (1-Clique)
 
-### 🌐 1. Interface Web Interativa (Recomendado)
-Para conversar com o Dory através de uma interface web moderna no navegador:
+Não é necessário abrir múltiplos terminais ou gerenciar scripts separados. Basta dar um duplo clique em:
+
 ```bash
 iniciar_chat_web.bat
 ```
-Ou via terminal:
-```bash
-python python/serve_dory.py
-```
-Acesse no seu navegador: `http://localhost:8000`
+*(ou simplesmente `iniciar.bat`)*
 
-### 🤖 2. Agente Autônomo Dory (Manipulação de Arquivos e Terminal)
-O Agente Dory é capaz de raciocinar e interagir com o ambiente de desenvolvimento local usando ferramentas:
-```bash
-iniciar_agente_dory.bat
-```
-Ou executando diretamente o binário em Rust:
-```bash
-crates/dory-agent/target/release/dory-agent.exe
-```
-> **Segurança:** Qualquer chamada para executar comandos de terminal exigirá confirmação explícita interativa `(S/N)` antes de ser disparada.
-
-### 🔌 3. Servidor de API Local (Compatível com OpenAI)
-Inicia um servidor local na porta 8000 compatível com LM Studio, Open WebUI, Cursor, Continue e VS Code:
-```bash
-iniciar_servidor_api.bat
-```
-- Endpoint: `http://localhost:8000/v1`
-- Modelo: `dory-4b-ptbr`
-
-### 💻 4. Chat Interativo no Terminal
-Para conversar diretamente via terminal com streaming token-a-token:
-```bash
-iniciar_chat.bat
-```
-*(Digite `/think` dentro do chat para alternar entre modo rápido e raciocínio profundo).*
+Este único arquivo executável inicia automaticamente todo o ecossistema integrado:
+1. **Interface Web Interativa:** Abre automaticamente no navegador padrão em `http://localhost:8000`.
+2. **Agente Autônomo com Ferramentas Integradas:** O modelo no navegador já possui acesso para **ler arquivos**, **criar códigos/scripts**, **listar pastas** e **executar comandos no terminal (PowerShell)** de forma autônoma.
+3. **Servidor de API OpenAI Local:** Expõe endpoint em `http://localhost:8000/v1` compatível com LM Studio, Cursor, VS Code e Continue.
+4. **Streaming & Raciocínio (`<think>`):** Exibição em tempo real do pensamento e ações de ferramentas tanto no terminal quanto na interface visual web.
 
 ---
 
