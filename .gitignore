@@ -1,0 +1,35 @@
+# Ambientes virtuais e dependências locais
+.venv/
+venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# Cache Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Rust build artifacts
+target/
+crates/**/target/
+
+# Modelo mesclado completo de 8 GB (Reconstruível via python/merge_ngpt_dory.py)
+models/dory-4b-ptbr-merged/
+
+# Checkpoints intermediários redundantes do Hugging Face (mantém apenas o final dory-lora-ptbr)
+models/dory-lora-ptbr/checkpoint-*/
+
+# Arquivos temporários
+*.tmp*
+*.log
+
+# Arquivos de IDE e SO
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
+.DS_Store
