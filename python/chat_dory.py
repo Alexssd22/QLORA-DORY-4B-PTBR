@@ -1,6 +1,18 @@
 import os
 import sys
 import json
+import ctypes
+
+# Desativar QuickEdit mode no Windows CMD para evitar que o clique do mouse congele a execução
+if sys.platform == "win32":
+    try:
+        kernel32 = ctypes.windll.kernel32
+        hStdin = kernel32.GetStdHandle(-10)  # STD_INPUT_HANDLE
+        mode = ctypes.c_ulong()
+        if kernel32.GetConsoleMode(hStdin, ctypes.byref(mode)):
+            kernel32.SetConsoleMode(hStdin, (mode.value & ~0x0040) | 0x0080)
+    except Exception:
+        pass
 
 # Garantir carregamento correto das DLLs CUDA no Windows
 site_torch_lib = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".venv", "Lib", "site-packages", "torch", "lib")
@@ -11,7 +23,7 @@ if os.path.exists(site_torch_lib) and hasattr(os, "add_dll_directory"):
         pass
 
 import torch
-from transformers import AutoTokenizer, configuration_utils
+from transformers import AutoTokenizer, configuration_utils, TextStreamer
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from modeling_dory import DoryConfig, DoryForCausalLM
@@ -35,9 +47,9 @@ def main():
     elif os.path.exists(LORA_PATH):
         load_path = LORA_PATH
         is_lora = True
-        print(f"Modelo mesclado ainda não gerado. Carregando base + LoRA de: {load_path}")
+        print(f"Modelo mesclado não encontrado. Carregando base + LoRA de: {load_path}")
     else:
-        print("ERRO: Nenhum checkpoint encontrado em 'models/'. Execute o treino primeiro.")
+        print("ERRO: Nenhum modelo encontrado em 'models/'.")
         sys.exit(1)
 
     tokenizer = AutoTokenizer.from_pretrained(load_path, trust_remote_code=True)
@@ -69,6 +81,7 @@ def main():
         )
         model = PeftModel.from_pretrained(base, load_path)
 
+    model.eval()
     print("\nModelo carregado na RTX 4070! Digite 'sair' para encerrar.\n")
 
     history = [
@@ -77,6 +90,9 @@ def main():
             "content": "Você é o Dory 4B, um assistente inteligente e prestativo fluente em Português do Brasil. Você responde de forma clara, direta e objetiva, sem recusas moralistas ou sermões desnecessários, com excelência técnica em programação e conhecimentos gerais.",
         }
     ]
+
+    # Streamer para exibir os tokens em tempo real na tela conforme são gerados
+    streamer = TextStreamer(tokenizer, skip_prompt=True, skip_special_tokens=True)
 
     while True:
         try:
@@ -102,6 +118,7 @@ def main():
             with torch.no_grad():
                 output_tokens = model.generate(
                     **inputs,
+                    streamer=streamer,
                     max_new_tokens=512,
                     temperature=0.7,
                     top_p=0.9,
@@ -111,15 +128,12 @@ def main():
                     pad_token_id=tokenizer.eos_token_id,
                 )
 
-            # Decodificar apenas a nova resposta gerada
+            # Salvar no histórico
             generated_ids = output_tokens[0][inputs.input_ids.shape[1] :]
             response = tokenizer.decode(generated_ids, skip_special_tokens=True).strip()
-
-            # Se houver tags <think>, podemos opcionalmente formatar ou exibir a resposta final
             if "</think>" in response:
                 response = response.split("</think>")[-1].strip()
 
-            print(response)
             history.append({"role": "assistant", "content": response})
 
         except KeyboardInterrupt:

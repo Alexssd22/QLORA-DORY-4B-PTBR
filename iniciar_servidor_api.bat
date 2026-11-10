@@ -1,10 +1,12 @@
 @echo off
-title Dory 1.0 4B PT-BR - Servidor Local OpenAI API
+title Dory 1.0 4B PT-BR - Chat no Navegador & Servidor API
 cd /d "%~dp0"
 echo ============================================================
-echo Iniciando Servidor Local OpenAI API (Porta 8000)
-echo Endpoint: http://localhost:8000/v1
-echo Modelo: dory-4b-ptbr
+echo Iniciando Dory 1.0 4B PT-BR
+echo A interface abrira automaticamente no navegador:
+echo   --^> http://localhost:8000
+echo Endpoint API OpenAI (para LM Studio/Continue/Cursor):
+echo   --^> http://localhost:8000/v1
 echo ============================================================
 echo.
 
