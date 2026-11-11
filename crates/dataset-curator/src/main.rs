@@ -93,8 +93,8 @@ fn main() -> Result<()> {
     let base_samples = dataset_samples::get_all_samples();
     println!("1. Amostras especializadas locais carregadas: {}", base_samples.len());
 
-    // Fator de sobreamostragem (35x) para garantir que Rust, Agente e PT-BR estejam presentes em todo lote
-    let oversample_factor = 35;
+    // Fator de sobreamostragem (45x) para garantir que Rust, Agente e PT-BR estejam presentes em todo lote
+    let oversample_factor = 45;
     for (user_q, assistant_a) in base_samples {
         for i in 0..oversample_factor {
             let q = if i == 0 {
@@ -130,7 +130,16 @@ fn main() -> Result<()> {
             let user_q = item.instruction.trim().to_string();
             let assistant_a = item.output.trim().to_string();
 
-            if user_q.len() < 5 || assistant_a.len() < 5 {
+            if user_q.len() < 8 || assistant_a.len() < 15 {
+                continue;
+            }
+
+            let lower_a = assistant_a.to_lowercase();
+            // Filtrar recusas e pregações moralistas do dataset genérico
+            if lower_a.contains("como um modelo de linguagem")
+                || lower_a.contains("como uma inteligência artificial, não posso")
+                || lower_a.contains("desculpe, mas não posso")
+            {
                 continue;
             }
 
