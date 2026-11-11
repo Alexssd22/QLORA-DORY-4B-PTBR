@@ -1,13 +1,13 @@
 @echo off
 chcp 65001 >nul
-title Treinamento QLoRA Dory 4B PT-BR (Passo 200 -> 400)
+title Treinamento QLoRA Dory 4B PT-BR (Passo 400 -> 500)
 
 echo ============================================================
 echo   Iniciando Treinamento QLoRA - Dory 1.0 4B PT-BR
 echo   Hardware: NVIDIA GeForce RTX 4070 (12 GB VRAM)
 echo   Dataset: 18.386 amostras curadas em Português (com Rust First)
 echo   Matemática: Hiperesfera nGPT com Normalização Exata
-echo   Meta: Passo 400 (Convergência com Resfriamento do LR)
+echo   Meta: Passo 500 (Refinamento Estendido na RTX 4070)
 echo ============================================================
 echo.
 

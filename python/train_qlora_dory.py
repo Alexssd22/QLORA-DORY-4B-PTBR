@@ -142,7 +142,7 @@ def main():
         lr_scheduler_type="cosine",
         warmup_steps=30,
         weight_decay=0.01,
-        max_steps=400,
+        max_steps=500,
         logging_steps=10,
         logging_first_step=True,
         eval_strategy="steps",
@@ -171,17 +171,17 @@ def main():
         data_collator=data_collator,
     )
 
-    # Identificar checkpoint prévio para continuar o refinamento
+    # Identificar checkpoint mais recente para continuar o refinamento
     resume_checkpoint = None
-    if os.path.exists(os.path.join(OUTPUT_DIR, "checkpoint-200")):
-        resume_checkpoint = os.path.join(OUTPUT_DIR, "checkpoint-200")
-        print(f"\n[🔄 Retomando Treinamento] Checkpoint encontrado: {resume_checkpoint}")
-    elif os.path.exists(os.path.join(OUTPUT_DIR, "checkpoint-100")):
-        resume_checkpoint = os.path.join(OUTPUT_DIR, "checkpoint-100")
-        print(f"\n[🔄 Retomando Treinamento] Checkpoint encontrado: {resume_checkpoint}")
+    for step in [400, 300, 200, 100]:
+        ckpt = os.path.join(OUTPUT_DIR, f"checkpoint-{step}")
+        if os.path.exists(ckpt):
+            resume_checkpoint = ckpt
+            print(f"\n[🔄 Retomando Treinamento] Checkpoint mais recente encontrado: {resume_checkpoint}")
+            break
 
     print("\n" + "=" * 60)
-    print("Iniciando refinamento QLoRA na RTX 4070 até o passo 400...")
+    print("Iniciando refinamento QLoRA na RTX 4070 até o passo 500...")
     print("=" * 60)
 
     trainer.train(resume_from_checkpoint=resume_checkpoint)
