@@ -31,6 +31,10 @@ models/dory-lora-ptbr-legacy/
 *.tmp*
 *.log
 
+# Configurações locais e histórico de conversas do usuário
+config/chats/
+config/settings.json
+
 # Arquivos de IDE e SO
 .vscode/
 .idea/
