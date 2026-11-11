@@ -11,6 +11,7 @@ import webbrowser
 import urllib.request
 import urllib.parse
 import html
+import asyncio
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 
@@ -23,9 +24,9 @@ if os.path.exists(site_torch_lib) and hasattr(os, "add_dll_directory"):
         pass
 
 import torch
-from transformers import AutoTokenizer, configuration_utils, TextStreamer
+from transformers import AutoTokenizer, configuration_utils, TextIteratorStreamer, TextStreamer
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, Response, JSONResponse
+from fastapi.responses import HTMLResponse, Response, JSONResponse, StreamingResponse
 import uvicorn
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -76,7 +77,6 @@ def save_settings(new_settings):
 
 SETTINGS = load_settings()
 
-# Estatísticas globais da sessão do servidor
 SESSION_STATS = {
     "total_tokens_used": 0,
     "total_requests": 0,
@@ -118,7 +118,6 @@ else:
 tokenizer = AutoTokenizer.from_pretrained(load_path, trust_remote_code=True)
 config_dict = json.load(open(os.path.join(load_path, "config.json"), "r", encoding="utf-8"))
 
-# Aplica dinamicamente a quantidade de loops definida pelo usuário
 config_dict["n_recurrent_loops"] = int(SETTINGS.get("n_recurrent_loops", 2))
 config = DoryConfig(**config_dict)
 
@@ -148,6 +147,9 @@ else:
 
 model.eval()
 print(f"✓ Dory 1.0 4B carregado com sucesso na memória! ({config.n_recurrent_loops} loops ativos)\n")
+
+# Lock para sincronizar gerações concorrentes na GPU
+generation_lock = threading.Lock()
 
 # ============================================================
 # FERRAMENTAS DO AGENTE DE SISTEMA (AGENT TOOLS & SKILLS)
@@ -369,11 +371,11 @@ def execute_tool(func_name: str, params: dict) -> str:
             req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
             with urllib.request.urlopen(req, timeout=12) as resp:
                 content = resp.read().decode("utf-8", errors="ignore")
-            snippets = re.findall(r'<a[^>]+class=[\"\']result__snippet[\"\'][^>]*>([\s\S]*?)</a>', content)
-            titles = re.findall(r'<a[^>]+class=[\"\']result__url[\"\'][^>]*>([\s\S]*?)</a>', content)
+            snippets = re.findall(r'<a[^>]+class=[\"\']result__snippet[\"\'][^>]*>(.*?)</a>', content, re.DOTALL)
+            titles = re.findall(r'<a[^>]+class=[\"\']result__url[\"\'][^>]*>(.*?)</a>', content, re.DOTALL)
             results = []
-            for i, snip in enumerate(snippets[:4]):
-                clean_s = html.unescape(re.sub(r'<[^>]+>', '', snip)).strip()
+            for i in range(min(len(snippets), 4)):
+                clean_s = html.unescape(re.sub(r'<[^>]+>', '', snippets[i])).strip()
                 t_str = html.unescape(re.sub(r'<[^>]+>', '', titles[i])).strip() if i < len(titles) else f"Fonte {i+1}"
                 results.append(f"[{i+1}] {t_str}\n{clean_s}")
             return f"RESULTADOS DA BUSCA PARA '{termo}':\n\n" + ("\n\n".join(results) if results else "Nenhum resultado relevante encontrado.")
@@ -466,10 +468,10 @@ def parse_tool_call(text: str):
     return None
 
 # ============================================================
-# INTERFACE WEB MODERNA COM ABAS, HISTÓRICO E MÉTRICAS
+# INTERFACE WEB MODERNA COM STREAMING, ABAS, HISTÓRICO E TTS
 # ============================================================
 
-HTML_PAGE = """<!DOCTYPE html>
+HTML_PAGE = r"""<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
@@ -505,9 +507,10 @@ HTML_PAGE = """<!DOCTYPE html>
         .badge-gpu { background: rgba(16, 185, 129, 0.12); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
         .badge-loops { background: rgba(56, 189, 248, 0.12); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); }
         .badge-speed { background: rgba(245, 158, 11, 0.12); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
+        .badge-vram { background: rgba(168, 85, 247, 0.12); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.3); }
         
         .header-actions { display: flex; gap: 8px; align-items: center; }
-        .btn-icon { background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-main); padding: 5px 10px; border-radius: 6px; font-size: 0.8rem; cursor: pointer; transition: all 0.2s; }
+        .btn-icon { background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-main); padding: 5px 10px; border-radius: 6px; font-size: 0.8rem; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 4px; }
         .btn-icon:hover { border-color: var(--accent); color: #fff; }
 
         /* Abas de Conversas (Multi-tabs) */
@@ -529,7 +532,7 @@ HTML_PAGE = """<!DOCTYPE html>
         .user .avatar { background: #2563eb; color: #fff; }
         .assistant .avatar { background: linear-gradient(135deg, #0284c7, #38bdf8); }
         .content-box { display: flex; flex-direction: column; gap: 6px; width: 100%; }
-        .content { padding: 12px 16px; border-radius: 12px; font-size: 0.93rem; word-break: break-word; white-space: pre-wrap; }
+        .content { padding: 12px 16px; border-radius: 12px; font-size: 0.93rem; word-break: break-word; white-space: pre-wrap; position: relative; }
         .user .content { background-color: var(--user-bubble); color: #fff; border-bottom-right-radius: 2px; }
         .assistant .content { background-color: var(--card-bg); border: 1px solid var(--card-border); border-bottom-left-radius: 2px; }
 
@@ -541,6 +544,18 @@ HTML_PAGE = """<!DOCTYPE html>
         .tool-output { background: rgba(0,0,0,0.45); padding: 8px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.06); font-family: Consolas, monospace; white-space: pre-wrap; font-size: 0.78rem; color: #e2e8f0; max-height: 220px; overflow-y: auto; margin-top: 6px; }
         .tool-output summary { cursor: pointer; color: var(--success); font-weight: 600; }
 
+        /* Code Block Styling with Copy Button */
+        .code-container { background: #080c16; border: 1px solid var(--card-border); border-radius: 8px; margin: 8px 0; overflow: hidden; }
+        .code-header { background: #111a30; padding: 4px 10px; display: flex; justify-content: space-between; align-items: center; font-size: 0.72rem; color: var(--text-dim); }
+        .btn-copy { background: transparent; border: 1px solid var(--card-border); color: var(--accent); padding: 2px 8px; border-radius: 4px; font-size: 0.72rem; cursor: pointer; }
+        .btn-copy:hover { background: var(--accent); color: #0a0f1d; }
+        pre.code-block { padding: 10px 12px; font-family: Consolas, monospace; font-size: 0.84rem; overflow-x: auto; color: #e2e8f0; line-height: 1.5; }
+
+        /* Action Buttons on Message */
+        .msg-footer { display: flex; gap: 8px; margin-top: 4px; }
+        .msg-action { background: transparent; border: none; color: var(--text-dim); font-size: 0.75rem; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; border-radius: 4px; }
+        .msg-action:hover { background: var(--card-bg); color: var(--accent); }
+
         /* Chips & Input Footer */
         footer { background-color: var(--panel-bg); border-top: 1px solid var(--card-border); padding: 12px 20px; }
         .suggestions { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; max-width: 900px; margin-left: auto; margin-right: auto; }
@@ -549,9 +564,14 @@ HTML_PAGE = """<!DOCTYPE html>
         .input-box { display: flex; gap: 10px; align-items: flex-end; max-width: 900px; margin: 0 auto; }
         textarea { flex: 1; background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 10px; color: #fff; padding: 10px 14px; font-size: 0.93rem; resize: none; max-height: 140px; min-height: 44px; outline: none; transition: border-color 0.2s; }
         textarea:focus { border-color: var(--accent); }
+        
+        .action-btns { display: flex; gap: 6px; }
         button#send-btn { background: var(--accent); color: #0a0f1d; border: none; border-radius: 10px; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 18px; transition: background 0.2s; flex-shrink: 0; }
         button#send-btn:hover:not(:disabled) { background: var(--accent-hover); color: #fff; }
         button#send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        button#stop-btn { background: #ef4444; color: #fff; border: none; border-radius: 10px; width: 44px; height: 44px; display: none; align-items: center; justify-content: center; cursor: pointer; font-size: 16px; flex-shrink: 0; }
+        button#stop-btn:hover { background: #dc2626; }
+
         .cursor { display: inline-block; width: 6px; height: 15px; background-color: var(--accent); animation: blink 1s infinite; vertical-align: middle; margin-left: 2px; }
         @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
 
@@ -571,16 +591,18 @@ HTML_PAGE = """<!DOCTYPE html>
             <div class="logo-icon">🐟</div>
             <div>
                 <div class="title">Dory 1.0 4B PT-BR &bull; Agente Autônomo</div>
-                <div class="subtitle">Acesso Total a Arquivos, Terminal e Internet &bull; Uncensored</div>
+                <div class="subtitle">Streaming Ao Vivo &bull; Acesso a Arquivos, Terminal e Web &bull; Uncensored</div>
             </div>
         </div>
         <div class="status-badges">
             <span class="badge badge-gpu" id="badge-gpu">● GPU Ativa</span>
+            <span class="badge badge-vram" id="badge-vram">💾 VRAM: --</span>
             <span class="badge badge-loops" id="badge-loops">⚡ 2 Loops</span>
             <span class="badge badge-speed" id="badge-speed">🚀 0.0 tok/s</span>
         </div>
         <div class="header-actions">
-            <button class="btn-icon" onclick="openSettingsModal()">⚙️ Configurações</button>
+            <button class="btn-icon" onclick="exportChatMarkdown()">📥 Exportar (.md)</button>
+            <button class="btn-icon" onclick="openSettingsModal()">⚙️ Ajustes</button>
             <button class="btn-icon" onclick="clearCurrentChat()">🗑️ Limpar</button>
         </div>
     </header>
@@ -596,14 +618,17 @@ HTML_PAGE = """<!DOCTYPE html>
     <!-- Rodapé de Input -->
     <footer>
         <div class="suggestions">
-            <div class="suggestion-chip" onclick="usePrompt('Busque na internet as últimas novidades sobre modelos de inteligência artificial pequenos.')">🌐 Buscar na Web</div>
+            <div class="suggestion-chip" onclick="usePrompt('Busque na internet as últimas notícias sobre modelos abertos de inteligência artificial.')">🌐 Buscar na Web</div>
             <div class="suggestion-chip" onclick="usePrompt('Liste os arquivos e subpastas do diretório atual.')">📂 Listar Arquivos</div>
-            <div class="suggestion-chip" onclick="usePrompt('Obtenha as informações completas de hardware e sistema operacional.')">💻 Status do PC</div>
-            <div class="suggestion-chip" onclick="usePrompt('Crie um arquivo chamado teste.rs com uma função em Rust.')">🦀 Criar Arquivo Rust</div>
+            <div class="suggestion-chip" onclick="usePrompt('Obtenha as informações completas de hardware, GPU e sistema operacional.')">💻 Status do PC</div>
+            <div class="suggestion-chip" onclick="usePrompt('Crie um arquivo chamado calculadora.rs com uma implementação em Rust.')">🦀 Criar Arquivo Rust</div>
         </div>
         <div class="input-box">
             <textarea id="prompt-input" rows="1" placeholder="Peça ao Dory para criar arquivos, rodar comandos, pesquisar na web, codificar..."></textarea>
-            <button id="send-btn" onclick="sendMessage()">➤</button>
+            <div class="action-btns">
+                <button id="send-btn" onclick="sendMessage()">➤</button>
+                <button id="stop-btn" onclick="stopGeneration()">⏹</button>
+            </div>
         </div>
     </footer>
 
@@ -647,17 +672,20 @@ HTML_PAGE = """<!DOCTYPE html>
         const chatContainer = document.getElementById('chat-container');
         const promptInput = document.getElementById('prompt-input');
         const sendBtn = document.getElementById('send-btn');
+        const stopBtn = document.getElementById('stop-btn');
         const tabsBar = document.getElementById('tabs-bar');
         
         let chats = [];
         let currentChatId = null;
         let isGenerating = false;
+        let abortController = null;
         let currentSettings = {};
 
         // Inicialização
         window.addEventListener('DOMContentLoaded', async () => {
             await loadSettingsFromServer();
             await loadChatsFromServer();
+            startTelemetryPoll();
             promptInput.focus();
         });
 
@@ -695,6 +723,18 @@ HTML_PAGE = """<!DOCTYPE html>
             }
         }
 
+        function startTelemetryPoll() {
+            setInterval(async () => {
+                try {
+                    const res = await fetch('/api/telemetry');
+                    const tel = await res.json();
+                    if (tel.vram_allocated_gb !== undefined) {
+                        document.getElementById('badge-vram').innerText = `💾 VRAM: ${tel.vram_allocated_gb} / ${tel.vram_total_gb} GB`;
+                    }
+                } catch(e) {}
+            }, 5000);
+        }
+
         async function loadChatsFromServer() {
             try {
                 const res = await fetch('/api/chats');
@@ -712,7 +752,6 @@ HTML_PAGE = """<!DOCTYPE html>
         }
 
         function renderTabs() {
-            // Remove abas antigas mantendo o botão "+ Nova Conversa"
             const btn = tabsBar.querySelector('.btn-new-tab');
             tabsBar.innerHTML = '';
             tabsBar.appendChild(btn);
@@ -816,7 +855,7 @@ HTML_PAGE = """<!DOCTYPE html>
                     <div class="avatar">🐟</div>
                     <div class="content-box">
                         <div class="content">Olá! Eu sou o <strong>Agente Dory 4B</strong> ajustado em Português do Brasil.
-Além de conversar e programar, eu tenho acesso completo às ferramentas do seu computador: posso **ler, criar e mover arquivos**, **executar comandos no terminal**, **buscar na internet** e analisar seu sistema operacional.
+Além de conversar e programar com raciocínio, eu tenho acesso completo às ferramentas do seu computador: posso **ler, criar, modificar e mover arquivos**, **executar comandos no terminal**, **fazer pesquisas na internet** e analisar seu sistema operacional.
 
 Como posso te ajudar agora?</div>
                     </div>
@@ -825,8 +864,14 @@ Como posso te ajudar agora?</div>
         }
 
         // ==========================================
-        // ENVIO DE MENSAGENS E PROCESSAMENTO
+        // STREAMING EM TEMPO REAL AO VIVO
         // ==========================================
+
+        function stopGeneration() {
+            if (abortController) {
+                abortController.abort();
+            }
+        }
 
         async function sendMessage() {
             const text = promptInput.value.trim();
@@ -835,7 +880,6 @@ Como posso te ajudar agora?</div>
             const cur = chats.find(c => c.id === currentChatId);
             if (!cur) return;
 
-            // Atualiza título da aba se for a primeira mensagem
             if (cur.messages.length === 0) {
                 cur.title = text.slice(0, 24) + (text.length > 24 ? '...' : '');
                 renderTabs();
@@ -846,20 +890,37 @@ Como posso te ajudar agora?</div>
             promptInput.value = '';
             promptInput.style.height = '44px';
             isGenerating = true;
-            sendBtn.disabled = true;
+            sendBtn.style.display = 'none';
+            stopBtn.style.display = 'flex';
+
+            abortController = new AbortController();
 
             const botMsgEl = appendMessageUI('assistant', '');
             const contentBox = botMsgEl.querySelector('.content-box');
+            
+            let assistantObj = {
+                role: 'assistant',
+                content: '',
+                thought: '',
+                tool_calls: []
+            };
+
+            let thinkContainer = null;
+            let textSpan = null;
+            let toolContainer = null;
+
             contentBox.innerHTML = `
-                <div class="content" style="color:var(--accent);font-style:italic;">
-                    🤖 Dory analisando solicitação e acionando ferramentas... <span class="cursor"></span>
+                <div class="content" id="live-reply">
+                    <span id="live-text"></span><span class="cursor"></span>
                 </div>
             `;
+            textSpan = contentBox.querySelector('#live-text');
 
             try {
-                const response = await fetch('/api/chat', {
+                const response = await fetch('/api/chat/stream', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
+                    signal: abortController.signal,
                     body: JSON.stringify({
                         chat_id: currentChatId,
                         messages: cur.messages,
@@ -870,64 +931,112 @@ Como posso te ajudar agora?</div>
 
                 if (!response.ok) throw new Error(`Erro do servidor (${response.statusText})`);
 
-                const data = await response.json();
-                const choice = data.choices[0];
-                const msgObj = choice.message;
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder("utf-8");
+                let buffer = "";
 
-                // Atualizar Métricas no Header
-                if (data.usage && data.usage.tokens_per_second) {
-                    document.getElementById('badge-speed').innerText = `🚀 ${data.usage.tokens_per_second.toFixed(1)} tok/s`;
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    buffer += decoder.decode(value, { stream: true });
+
+                    const lines = buffer.split("\n\n");
+                    buffer = lines.pop();
+
+                    for (const line of lines) {
+                        if (!line.startsWith("data: ")) continue;
+                        const dataStr = line.slice(6).trim();
+                        if (dataStr === "[DONE]") break;
+
+                        try {
+                            const evt = JSON.parse(dataStr);
+                            
+                            if (evt.type === 'think_token') {
+                                if (!thinkContainer) {
+                                    thinkContainer = document.createElement('details');
+                                    thinkContainer.className = 'think-box';
+                                    thinkContainer.open = true;
+                                    thinkContainer.innerHTML = `<summary>💭 Raciocínio Ao Vivo...</summary><div class="think-content" style="margin-top:4px;"></div>`;
+                                    contentBox.insertBefore(thinkContainer, contentBox.firstChild);
+                                }
+                                assistantObj.thought += evt.token;
+                                thinkContainer.querySelector('.think-content').innerText = assistantObj.thought;
+                            } 
+                            else if (evt.type === 'token') {
+                                assistantObj.content += evt.token;
+                                textSpan.innerHTML = formatMarkdown(assistantObj.content);
+                            }
+                            else if (evt.type === 'tool_start') {
+                                if (!toolContainer) {
+                                    toolContainer = document.createElement('div');
+                                    contentBox.insertBefore(toolContainer, contentBox.querySelector('#live-reply'));
+                                }
+                                const card = document.createElement('div');
+                                card.className = 'tool-card';
+                                card.id = `tool-${evt.id}`;
+                                card.innerHTML = `
+                                    <div class="tool-header">🛠️ Executando: <code>${escapeHtml(evt.function)}</code></div>
+                                    <div style="color:var(--text-dim);font-size:0.75rem;">${escapeHtml(JSON.stringify(evt.parameters))}</div>
+                                    <div class="tool-status" style="color:var(--accent);font-style:italic;margin-top:4px;">⏳ Processando ação no PC...</div>
+                                `;
+                                toolContainer.appendChild(card);
+                            }
+                            else if (evt.type === 'tool_end') {
+                                const card = document.getElementById(`tool-${evt.id}`);
+                                if (card) {
+                                    card.querySelector('.tool-status').remove();
+                                    const outDetails = document.createElement('details');
+                                    outDetails.className = 'tool-output';
+                                    outDetails.open = true;
+                                    outDetails.innerHTML = `<summary>📥 Retorno da Operação</summary><div>${escapeHtml(evt.output)}</div>`;
+                                    card.appendChild(outDetails);
+                                }
+                                assistantObj.tool_calls.push({
+                                    function: evt.function,
+                                    parameters: evt.parameters,
+                                    output: evt.output
+                                });
+                            }
+                            else if (evt.type === 'metrics') {
+                                document.getElementById('badge-speed').innerText = `🚀 ${evt.tok_s.toFixed(1)} tok/s`;
+                            }
+                        } catch (e) {
+                            console.error("Erro no parse do stream SSE:", e);
+                        }
+                        chatContainer.scrollTop = chatContainer.scrollHeight;
+                    }
                 }
 
-                contentBox.innerHTML = '';
+                // Finalizar exibição e remover cursor
+                const curEl = contentBox.querySelector('.cursor');
+                if (curEl) curEl.remove();
 
-                // Raciocínio
-                if (msgObj.thought) {
-                    const thinkDiv = document.createElement('details');
-                    thinkDiv.className = 'think-box';
-                    thinkDiv.innerHTML = `<summary>💭 Raciocínio do Agente</summary><div style="margin-top:6px;">${escapeHtml(msgObj.thought)}</div>`;
-                    contentBox.appendChild(thinkDiv);
+                if (thinkContainer) {
+                    thinkContainer.open = false; // fecha o think ao terminar para visual limpo
+                    thinkContainer.querySelector('summary').innerText = '💭 Raciocínio do Agente';
                 }
 
-                // Ferramentas
-                if (msgObj.tool_calls && msgObj.tool_calls.length > 0) {
-                    msgObj.tool_calls.forEach(tc => {
-                        const card = document.createElement('div');
-                        card.className = 'tool-card';
-                        card.innerHTML = `
-                            <div class="tool-header">
-                                <span>🛠️ Ação: <code>${escapeHtml(tc.function)}</code></span>
-                            </div>
-                            <div style="color:var(--text-dim);font-size:0.75rem;margin-bottom:4px;">${escapeHtml(JSON.stringify(tc.parameters))}</div>
-                            <details class="tool-output" open>
-                                <summary>📥 Resultado da Execução</summary>
-                                <div style="margin-top:4px;">${escapeHtml(tc.output)}</div>
-                            </details>
-                        `;
-                        contentBox.appendChild(card);
-                    });
-                }
+                // Adicionar botões de ação (Copiar e Voz)
+                addMessageFooter(contentBox, assistantObj.content);
 
-                // Resposta Final
-                const replyDiv = document.createElement('div');
-                replyDiv.className = 'content';
-                replyDiv.innerText = msgObj.content;
-                contentBox.appendChild(replyDiv);
-
-                cur.messages.push({
-                    role: 'assistant',
-                    content: msgObj.content,
-                    thought: msgObj.thought,
-                    tool_calls: msgObj.tool_calls
-                });
-
+                cur.messages.push(assistantObj);
                 await saveCurrentChat();
 
             } catch (err) {
-                contentBox.innerHTML = `<div class="content" style="color:#ef4444;">Erro ao processar: ${escapeHtml(err.message)}</div>`;
+                if (err.name === 'AbortError') {
+                    textSpan.innerHTML += ' <em>[Geração interrompida pelo usuário]</em>';
+                    const curEl = contentBox.querySelector('.cursor');
+                    if (curEl) curEl.remove();
+                    cur.messages.push(assistantObj);
+                    await saveCurrentChat();
+                } else {
+                    contentBox.innerHTML = `<div class="content" style="color:#ef4444;">Erro ao processar: ${escapeHtml(err.message)}</div>`;
+                }
             } finally {
                 isGenerating = false;
-                sendBtn.disabled = false;
+                sendBtn.style.display = 'flex';
+                stopBtn.style.display = 'none';
+                abortController = null;
                 chatContainer.scrollTop = chatContainer.scrollHeight;
                 promptInput.focus();
             }
@@ -939,7 +1048,7 @@ Como posso te ajudar agora?</div>
             msgDiv.innerHTML = `
                 <div class="avatar">${role === 'user' ? '👤' : '🐟'}</div>
                 <div class="content-box">
-                    <div class="content">${escapeHtml(text)}</div>
+                    <div class="content">${formatMarkdown(text)}</div>
                 </div>
             `;
             chatContainer.appendChild(msgDiv);
@@ -959,9 +1068,111 @@ Como posso te ajudar agora?</div>
                     inner += `<div class="tool-card"><div class="tool-header">🛠️ ${escapeHtml(tc.function)}</div><details class="tool-output"><summary>Resultado</summary><div>${escapeHtml(tc.output)}</div></details></div>`;
                 });
             }
-            inner += `<div class="content">${escapeHtml(msgObj.content)}</div></div>`;
+            inner += `<div class="content">${formatMarkdown(msgObj.content)}</div>`;
+            inner += `</div>`;
             msgDiv.innerHTML = inner;
+            addMessageFooter(msgDiv.querySelector('.content-box'), msgObj.content);
             chatContainer.appendChild(msgDiv);
+        }
+
+        function addMessageFooter(contentBox, text) {
+            const footer = document.createElement('div');
+            footer.className = 'msg-footer';
+            footer.innerHTML = `
+                <button class="msg-action" onclick="copyTextToClipboard(this, ${JSON.stringify(text)})">📋 Copiar Texto</button>
+                <button class="msg-action" onclick="speakText(${JSON.stringify(text)})">🔊 Ouvir</button>
+            `;
+            contentBox.appendChild(footer);
+        }
+
+        // ==========================================
+        // UTILITÁRIOS: MARKDOWN, COPY, TTS, EXPORT
+        // ==========================================
+
+        function formatMarkdown(text) {
+            if (!text) return '';
+            let s = escapeHtml(text);
+
+            // Code blocks: ```lang ... ```
+            s = s.replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g, (match, lang, code) => {
+                const langName = lang ? lang.toUpperCase() : 'CÓDIGO';
+                const id = 'code-' + Math.random().toString(36).substring(2, 9);
+                return `
+                    <div class="code-container">
+                        <div class="code-header">
+                            <span>💻 ${langName}</span>
+                            <button class="btn-copy" onclick="copyCodeBlock('${id}')">📋 Copiar</button>
+                        </div>
+                        <pre class="code-block" id="${id}">${code}</pre>
+                    </div>
+                `;
+            });
+
+            // Inline code: `code`
+            s = s.replace(/`([^`]+)`/g, '<code style="background:rgba(255,255,255,0.1);padding:2px 5px;border-radius:4px;font-family:monospace;">$1</code>');
+
+            // Bold: **text**
+            s = s.replace(/\\*\\*(.*?)\\*\\*/g, '<strong>$1</strong>');
+
+            return s;
+        }
+
+        function copyCodeBlock(id) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            navigator.clipboard.writeText(el.innerText).then(() => {
+                const btn = el.parentElement.querySelector('.btn-copy');
+                btn.innerText = '✓ Copiado!';
+                setTimeout(() => btn.innerText = '📋 Copiar', 2000);
+            });
+        }
+
+        function copyTextToClipboard(btn, text) {
+            navigator.clipboard.writeText(text).then(() => {
+                const old = btn.innerText;
+                btn.innerText = '✓ Copiado!';
+                setTimeout(() => btn.innerText = old, 2000);
+            });
+        }
+
+        function speakText(text) {
+            if (!('speechSynthesis' in window)) {
+                alert("Seu navegador não suporta sintetizador de voz nativo.");
+                return;
+            }
+            window.speechSynthesis.cancel();
+            // Remove markdown syntax for cleaner speech
+            const cleanText = text.replace(/```[\s\S]*?```/g, 'bloco de código').replace(/`[^`]+`/g, '').replace(/[*_#]/g, '');
+            const utter = new SpeechSynthesisUtterance(cleanText);
+            utter.lang = 'pt-BR';
+            utter.rate = 1.05;
+            window.speechSynthesis.speak(utter);
+        }
+
+        function exportChatMarkdown() {
+            const cur = chats.find(c => c.id === currentChatId);
+            if (!cur || !cur.messages || cur.messages.length === 0) {
+                alert("Não há mensagens para exportar nesta conversa.");
+                return;
+            }
+
+            let md = `# 🐟 Conversa: ${cur.title || 'Dory 4B PT-BR'}\n`;
+            md += `*Data: ${new Date().toLocaleString('pt-BR')}*\n\n---\n\n`;
+
+            cur.messages.forEach(m => {
+                const author = m.role === 'user' ? '### 👤 Usuário' : '### 🐟 Dory 4B (Assistente)';
+                md += `${author}\n\n`;
+                if (m.thought) {
+                    md += `> **Pensamento:**\n> ${m.thought.replace(/\\n/g, '\n> ')}\n\n`;
+                }
+                md += `${m.content}\n\n---\n\n`;
+            });
+
+            const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `${(cur.title || 'chat').replace(/[^a-zA-Z0-9_-]/g, '_')}.md`;
+            a.click();
         }
 
         function escapeHtml(unsafe) {
@@ -974,9 +1185,6 @@ Como posso te ajudar agora?</div>
                 .replace(/'/g, "&#039;");
         }
 
-        // ==========================================
-        // MODAL DE CONFIGURAÇÕES
-        // ==========================================
         function openSettingsModal() {
             document.getElementById('modal-settings').style.display = 'flex';
         }
@@ -1012,16 +1220,10 @@ Como posso te ajudar agora?</div>
 """
 
 # ============================================================
-# API REST COM FASTAPI
+# API REST COM FASTAPI & STREAMING SSE
 # ============================================================
 
 app = FastAPI(title="Dory 1.0 4B PT-BR - Agente Autônomo & Web Chat")
-
-class ChatSessionItem(BaseModel):
-    id: str
-    title: str
-    messages: List[Dict[str, Any]]
-    updated_at: Optional[str] = None
 
 class ChatRequest(BaseModel):
     chat_id: Optional[str] = None
@@ -1049,6 +1251,18 @@ def update_settings(payload: Dict[str, Any]):
     SETTINGS.update(payload)
     save_settings(SETTINGS)
     return {"status": "ok", "settings": SETTINGS}
+
+@app.get("/api/telemetry")
+def get_telemetry():
+    vram_alloc = round(torch.cuda.memory_allocated() / (1024**3), 2) if torch.cuda.is_available() else 0.0
+    vram_tot = round(torch.cuda.get_device_properties(0).total_memory / (1024**3), 1) if torch.cuda.is_available() else 0.0
+    return {
+        "vram_allocated_gb": vram_alloc,
+        "vram_total_gb": vram_tot,
+        "total_tokens_used": SESSION_STATS["total_tokens_used"],
+        "tokens_per_second": SESSION_STATS["last_tokens_per_second"],
+        "total_requests": SESSION_STATS["total_requests"],
+    }
 
 @app.get("/api/chats")
 def list_chats():
@@ -1101,21 +1315,145 @@ def delete_chat(chat_id: str):
         os.remove(path)
     return {"status": "ok"}
 
+# ============================================================
+# STREAMING SSE TOKEN A TOKEN EM TEMPO REAL
+# ============================================================
+
+@app.post("/api/chat/stream")
+async def chat_stream_endpoint(req: ChatRequest):
+    """Transmite a resposta gerada token a token via Server-Sent Events (SSE)."""
+    raw_msgs = [{"role": m["role"], "content": m["content"]} for m in req.messages]
+    
+    if not any(m["role"] == "system" for m in raw_msgs):
+        current_msgs = [{"role": "system", "content": SYSTEM_AGENT_PROMPT}] + raw_msgs
+    else:
+        current_msgs = list(raw_msgs)
+
+    # Janela deslizante de contexto
+    if len(current_msgs) > 10:
+        current_msgs = [current_msgs[0]] + current_msgs[-8:]
+
+    enable_think = bool(req.enable_thinking)
+    max_new = req.max_tokens or int(SETTINGS.get("max_tokens", 512))
+    temp = req.temperature or float(SETTINGS.get("temperature", 0.65))
+
+    async def sse_generator():
+        MAX_TURNS = 3
+        turn = 0
+        total_tokens = 0
+        t_start = time.time()
+
+        while turn < MAX_TURNS:
+            turn += 1
+            prompt = tokenizer.apply_chat_template(
+                current_msgs,
+                tokenize=False,
+                add_generation_prompt=True,
+                enable_thinking=enable_think,
+            )
+            inputs = tokenizer(prompt, return_tensors="pt").to("cuda" if torch.cuda.is_available() else "cpu")
+            streamer = TextIteratorStreamer(tokenizer, skip_prompt=True, skip_special_tokens=False)
+
+            eos_id = tokenizer.eos_token_id if tokenizer.eos_token_id is not None else 11
+            pad_id = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else eos_id
+
+            gen_kwargs = dict(
+                **inputs,
+                streamer=streamer,
+                max_new_tokens=max_new,
+                temperature=temp,
+                top_p=float(SETTINGS.get("top_p", 0.9)),
+                repetition_penalty=float(SETTINGS.get("repetition_penalty", 1.10)),
+                do_sample=True,
+                eos_token_id=eos_id,
+                pad_token_id=pad_id,
+            )
+
+            # Executa geração em thread dedicada
+            gen_thread = threading.Thread(target=model.generate, kwargs=gen_kwargs)
+            gen_thread.start()
+
+            full_reply = ""
+            in_think = False
+            in_tool = False
+            tool_buffer = ""
+
+            for chunk in streamer:
+                full_reply += chunk
+                total_tokens += 1
+
+                # Detectar tags <think>
+                if "<think>" in chunk and not in_think:
+                    in_think = True
+                    chunk = chunk.replace("<think>", "")
+                if "</think>" in chunk and in_think:
+                    in_think = False
+                    chunk = chunk.replace("</think>", "")
+
+                # Detectar tags <tool_call>
+                if "<tool_call>" in full_reply and not in_tool:
+                    in_tool = True
+                
+                if in_tool:
+                    tool_buffer += chunk
+                else:
+                    if in_think:
+                        yield f"data: {json.dumps({'type': 'think_token', 'token': chunk})}\n\n"
+                    else:
+                        clean_c = chunk.replace("<|im_end|>", "")
+                        if clean_c:
+                            yield f"data: {json.dumps({'type': 'token', 'token': clean_c})}\n\n"
+
+                await asyncio.sleep(0.001)
+
+            gen_thread.join()
+
+            # Verificar se houve chamada de ferramenta
+            tool_call = parse_tool_call(full_reply)
+            if tool_call and turn < MAX_TURNS:
+                func_name, params = tool_call
+                tool_id = int(time.time() * 1000)
+                
+                yield f"data: {json.dumps({'type': 'tool_start', 'id': tool_id, 'function': func_name, 'parameters': params})}\n\n"
+                
+                tool_output = execute_tool(func_name, params)
+                
+                yield f"data: {json.dumps({'type': 'tool_end', 'id': tool_id, 'function': func_name, 'parameters': params, 'output': tool_output})}\n\n"
+
+                current_msgs.append({"role": "assistant", "content": full_reply})
+                current_msgs.append({
+                    "role": "user",
+                    "content": f"<tool_response>\n{tool_output}\n</tool_response>"
+                })
+            else:
+                break
+
+        dt = max(time.time() - t_start, 0.05)
+        tok_s = total_tokens / dt
+        SESSION_STATS["total_tokens_used"] += total_tokens
+        SESSION_STATS["total_requests"] += 1
+        SESSION_STATS["last_tokens_per_second"] = tok_s
+
+        yield f"data: {json.dumps({'type': 'metrics', 'tok_s': tok_s, 'tokens': total_tokens, 'dt': dt})}\n\n"
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(sse_generator(), media_type="text/event-stream")
+
+# ============================================================
+# ENDPOINT PADRÃO REST (COMPATIBILIDADE OPENAI / LEGADO)
+# ============================================================
+
 @app.post("/api/chat")
 @app.post("/v1/chat/completions")
 def chat_endpoint(req: ChatRequest):
-    try:
+    with generation_lock:
         raw_msgs = [{"role": m["role"], "content": m["content"]} for m in req.messages]
         
-        # Injetar o prompt de agente se não estiver presente
         if not any(m["role"] == "system" for m in raw_msgs):
             current_msgs = [{"role": "system", "content": SYSTEM_AGENT_PROMPT}] + raw_msgs
         else:
             current_msgs = list(raw_msgs)
 
-        # Gerenciamento de Janela Deslizante de Contexto (evita truncamento abrupto)
-        MAX_CONTEXT = int(SETTINGS.get("context_window", 4096))
-        # Se ultrapassar a janela máxima, preserva o system prompt e pega as mensagens mais recentes
         if len(current_msgs) > 10:
             current_msgs = [current_msgs[0]] + current_msgs[-8:]
 
@@ -1137,8 +1475,6 @@ def chat_endpoint(req: ChatRequest):
 
         while turn < MAX_TURNS:
             turn += 1
-            print(f"\n--- [Passada {turn}/{MAX_TURNS}] Gerando resposta do modelo... ---")
-
             prompt = tokenizer.apply_chat_template(
                 current_msgs,
                 tokenize=False,
@@ -1150,9 +1486,8 @@ def chat_endpoint(req: ChatRequest):
 
             eos_id = tokenizer.eos_token_id if tokenizer.eos_token_id is not None else 11
             pad_id = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else eos_id
-
             max_new = req.max_tokens or int(SETTINGS.get("max_tokens", 512))
-            
+
             with torch.no_grad():
                 output_tokens = model.generate(
                     **inputs,
@@ -1161,7 +1496,6 @@ def chat_endpoint(req: ChatRequest):
                     temperature=req.temperature or float(SETTINGS.get("temperature", 0.65)),
                     top_p=float(SETTINGS.get("top_p", 0.9)),
                     repetition_penalty=float(SETTINGS.get("repetition_penalty", 1.10)),
-                    no_repeat_ngram_size=0,
                     do_sample=True,
                     eos_token_id=eos_id,
                     pad_token_id=pad_id,
@@ -1174,7 +1508,6 @@ def chat_endpoint(req: ChatRequest):
             if "<|im_end|>" in reply_raw:
                 reply_raw = reply_raw.split("<|im_end|>")[0].strip()
 
-            # Extração do raciocínio <think>
             if "<think>" in reply_raw and "</think>" in reply_raw:
                 th_start = reply_raw.find("<think>") + 7
                 th_end = reply_raw.find("</think>")
@@ -1183,21 +1516,15 @@ def chat_endpoint(req: ChatRequest):
             else:
                 reply_after_think = reply_raw
 
-            # Verificação de Chamada de Ferramenta
             tool_call = parse_tool_call(reply_raw)
             if tool_call and turn < MAX_TURNS:
                 func_name, params = tool_call
-                print(f"\n[🛠️  Ação do Agente]: {func_name} | Parâmetros: {params}")
-                
                 tool_output = execute_tool(func_name, params)
-                print(f"[📥 Retorno]:\n{tool_output[:250]}...")
-
                 executed_tools.append({
                     "function": func_name,
                     "parameters": params,
                     "output": tool_output
                 })
-
                 current_msgs.append({"role": "assistant", "content": reply_raw})
                 current_msgs.append({
                     "role": "user",
@@ -1212,12 +1539,9 @@ def chat_endpoint(req: ChatRequest):
         dt = max(time.time() - t0, 0.05)
         tok_s = total_gen_tokens / dt
 
-        # Atualizar estatísticas globais
         SESSION_STATS["total_tokens_used"] += total_gen_tokens + len(inputs.input_ids[0])
         SESSION_STATS["total_requests"] += 1
         SESSION_STATS["last_tokens_per_second"] = tok_s
-        SESSION_STATS["last_generation_time"] = dt
-        SESSION_STATS["last_tokens_generated"] = total_gen_tokens
 
         print(f"\n[📊 Métricas da Geração]:")
         print(f"  • Velocidade:       {tok_s:.1f} tokens/s")
@@ -1225,9 +1549,6 @@ def chat_endpoint(req: ChatRequest):
         print(f"  • Tempo Decorrido:  {dt:.2f}s")
         print(f"  • Total na Sessão:  {SESSION_STATS['total_tokens_used']} tokens processados")
         print("=" * 65 + "\n")
-
-        if not final_text:
-            final_text = "Operação concluída com sucesso."
 
         return {
             "id": f"chatcmpl-{int(time.time())}",
@@ -1238,7 +1559,7 @@ def chat_endpoint(req: ChatRequest):
                     "index": 0,
                     "message": {
                         "role": "assistant",
-                        "content": final_text,
+                        "content": final_text or "Operação concluída com sucesso.",
                         "thought": extracted_thought,
                         "tool_calls": executed_tools,
                     },
@@ -1254,10 +1575,6 @@ def chat_endpoint(req: ChatRequest):
                 "session_tokens_total": SESSION_STATS["total_tokens_used"]
             },
         }
-
-    except Exception as e:
-        print(f"\nERRO no chat: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 def open_browser():
     time.sleep(2.0)

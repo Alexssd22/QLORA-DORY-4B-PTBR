@@ -295,6 +295,28 @@ def configure_user_settings(hw):
         json.dump(settings, f, indent=2, ensure_ascii=False)
 
     print("\n✓ Configurações gravadas com sucesso em 'config/settings.json'!")
+
+    # Oferta de criar atalho na Área de Trabalho se ainda não existir
+    try:
+        desktop_dir = os.path.join(os.environ.get("USERPROFILE", ""), "Desktop")
+        shortcut_file = os.path.join(desktop_dir, "Dory 4B PT-BR.lnk")
+        if not os.path.exists(shortcut_file) and not auto_mode:
+            resp_sc = safe_input("\nDeseja criar um atalho na Área de Trabalho para abrir o Dory com 1 clique? [S/n]: ", "s").lower()
+            if resp_sc in ["s", "sim", "y", "yes"]:
+                ps_cmd = (
+                    "$ws = New-Object -ComObject WScript.Shell; "
+                    f"$sc = $ws.CreateShortcut('{shortcut_file}'); "
+                    f"$sc.TargetPath = '{os.path.abspath('iniciar.bat')}'; "
+                    f"$sc.WorkingDirectory = '{os.path.abspath('.')}'; "
+                    "$sc.Description = 'Dory 1.0 4B PT-BR - Agente Autônomo e Web Chat Local'; "
+                    "$sc.Save()"
+                )
+                subprocess.run(["powershell", "-NoProfile", "-Command", ps_cmd], capture_output=True)
+                if os.path.exists(shortcut_file):
+                    print("  ✓ Atalho 'Dory 4B PT-BR' criado na sua Área de Trabalho!")
+    except Exception:
+        pass
+
     return settings
 
 def main():

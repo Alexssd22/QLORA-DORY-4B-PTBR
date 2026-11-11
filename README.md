@@ -28,8 +28,14 @@ Basta dar um **duplo clique no arquivo `iniciar.bat`**:
 - **Configurações Antes de Carregar:** Você escolhe a quantidade de loops e o perfil do modelo no terminal antes de carregar o peso na VRAM. As preferências ficam salvas em `config/settings.json` para as próximas vezes.
 - **Detecção Inteligente de Hardware:** Se você não quiser configurar nada, o Dory analisa automaticamente sua GPU/VRAM e seleciona o melhor modo operacional (BF16 nativo para GPUs com 10GB+ de VRAM, ou 4-bit otimizado para placas menores).
 - **Métricas em Tempo Real no Terminal e na Web:** O console exibe a velocidade exata de geração em **tokens por segundo (tok/s)**, a contagem de tokens da resposta e o total acumulado na sessão.
+- **Streaming Token-a-Token ao Vivo:** O texto e o raciocínio aparecem em tempo real no navegador conforme o modelo pensa e gera, com botão de interrupção imediata (**⏹️ Parar**).
 - **Abas de Chat e Histórico Persistente:** Crie novas abas de conversas, alterne entre elas a qualquer momento e continue de onde parou. O histórico é gravado automaticamente em disco.
 - **Sem Truncamento de Respostas:** O sistema adota janela deslizante contínua com rolagem automática no navegador, garantindo que o modelo nunca perca o fio da meada ou corte respostas no meio.
+- **Exportação de Conversas:** Salve qualquer conversa com 1 clique no botão **📥 Exportar (.md)** em formato Markdown limpo e estruturado.
+- **Blocos de Código com 1-Clique Copy:** Destaque de sintaxe para blocos de código com botão **📋 Copiar Código** integrado.
+- **Leitura em Voz Alta (TTS):** Botão **🔊 Ouvir** em cada resposta do assistente utilizando a síntese de voz nativa do navegador (sem downloads adicionais).
+- **Telemetria de Hardware ao Vivo:** Monitoramento em tempo real do uso de VRAM da GPU, velocidade em tokens por segundo (tok/s) e consumo de contexto.
+- **Atalho na Área de Trabalho:** Execute o script `criar_atalho_area_de_trabalho.bat` para adicionar o Dory com 1 clique direto no seu Desktop.
 - **Raciocínio Configurável (`<think>`):** Escolha se prefere raciocínio automático, desligado (respostas diretas), curto (128 tokens) ou longo (512 tokens para problemas complexos).
 - **Agente Autônomo com Acesso Total:** O Dory possui ferramentas integradas para:
   - 📖 **Ler arquivos** e códigos em qualquer pasta permitida;
