@@ -37,14 +37,16 @@ Basta dar um **duplo clique no arquivo `iniciar.bat`**:
 - **Telemetria de Hardware ao Vivo:** Monitoramento em tempo real do uso de VRAM da GPU, velocidade em tokens por segundo (tok/s) e consumo de contexto.
 - **Atalho na Área de Trabalho:** Execute o script `criar_atalho_area_de_trabalho.bat` para adicionar o Dory com 1 clique direto no seu Desktop.
 - **Raciocínio Configurável (`<think>`):** Escolha se prefere raciocínio automático, desligado (respostas diretas), curto (128 tokens) ou longo (512 tokens para problemas complexos).
-- **Agente Autônomo com Acesso Total:** O Dory possui ferramentas integradas para:
-  - 📖 **Ler arquivos** e códigos em qualquer pasta permitida;
-  - ✏️ **Criar e modificar arquivos** (Python, Rust, C++, texto, etc.);
-  - 📂 **Mover, copiar e deletar** arquivos e diretórios;
-  - ⚡ **Executar comandos no terminal** (PowerShell e CMD);
-  - 🌐 **Buscar informações na internet** (pesquisa textual via DuckDuckGo sem necessidade de chaves de API);
-  - 📥 **Baixar arquivos** diretamente de links web;
-  - 💻 **Inspecionar hardware** (temperatura, uso de VRAM, GPU, CPU e espaço em disco).
+- **Agente Autônomo com Acesso Total e Ferramentas Nativas (20 Ferramentas):**
+  - 🌐 **Navegação Web e Leitura de Sites (`acessar_site`):** Acessa qualquer link HTTP/HTTPS, extrai o texto legível limpo (sem poluição de scripts/estilos) com resolução automática de certificados SSL no Windows.
+  - 🔍 **Pesquisa na Internet (`buscar_na_web`):** Realiza buscas textuais dinâmicas via DuckDuckGo sem chaves de API.
+  - 🤖 **Subagentes Especializados (`criar_agente`, `invocar_agente`, `listar_agentes`):** Permite criar personas e especialistas sob demanda (ex: *Especialista_Rust*, *Pesquisador_Web*), armazenados em `config/agents/` e invocados em contexto independente e focado.
+  - ⚡ **Habilidades e Automações (`criar_habilidade`, `executar_habilidade`, `listar_habilidades`):** Cria e executa scripts customizados em Python, PowerShell ou Batch sob demanda, salvos em `config/skills/`.
+  - 📖 **Leitura e Manipulação de Arquivos:** `ler_arquivo`, `criar_arquivo`, `modificar_arquivo` (anexar/sobrescrever), `mover_arquivo`, `copiar_arquivo`, `deletar_arquivo` e `listar_arquivos`.
+  - 💻 **Terminais do Sistema:** Executa comandos nativos no PowerShell (`executar_comando`) e no Prompt de Comando clássico (`executar_cmd`).
+  - 📥 **Download e Execução:** Baixa arquivos diretamente da internet (`baixar_arquivo`) e abre programas locais (`abrir_programa`).
+  - 📊 **Telemetria de Sistema:** Retorna diagnóstico completo de hardware, GPU, memória e disco (`obter_informacoes_sistema`).
+- **Alinhamento Estrito ao Template Jinja e Schema de Ferramentas:** Integração com as especificações oficiais da NVIDIA Nemotron Labs, gerando os blocos `<tools>` e processando chamadas em tags XML `<tool_call>` e blocos JSON de forma ultra-resiliente.
 - **Encerramento Limpo:** Ao fechar o terminal do Dory ou pressionar `Ctrl+C`, o modelo é imediatamente descarregado da GPU, liberando 100% da VRAM e encerrando todos os subprocessos.
 
 ---
@@ -121,7 +123,9 @@ QLORA-DORY-4B-PTBR/
 ├── treinar_dory_ptbr.bat           # Launcher opcional para retreino do modelo
 ├── config/                         # Configurações do usuário e sessões
 │   ├── settings.json               # Configurações salvas (loops, perfil, etc.)
-│   └── chats/                      # Histórico de conversas gravadas
+│   ├── chats/                      # Histórico de conversas gravadas
+│   ├── agents/                     # Subagentes especializados (Especialista_Rust, etc.)
+│   └── skills/                     # Habilidades e automações (Python, PowerShell, Batch)
 ├── models/
 │   ├── dory-4b-ptbr-merged/        # Modelo unificado em BF16 (~7.4 GB)
 │   └── dory-lora-ptbr/             # Adaptadores LoRA salvos no Passo 1000

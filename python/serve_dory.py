@@ -12,6 +12,8 @@ import urllib.request
 import urllib.parse
 import html
 import asyncio
+import ssl
+import shlex
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 
@@ -40,8 +42,12 @@ configuration_utils.PreTrainedConfig.validate_layer_type = lambda self: None
 
 CONFIG_DIR = "config"
 CHATS_DIR = os.path.join(CONFIG_DIR, "chats")
+AGENTS_DIR = os.path.join(CONFIG_DIR, "agents")
+SKILLS_DIR = os.path.join(CONFIG_DIR, "skills")
 SETTINGS_FILE = os.path.join(CONFIG_DIR, "settings.json")
 os.makedirs(CHATS_DIR, exist_ok=True)
+os.makedirs(AGENTS_DIR, exist_ok=True)
+os.makedirs(SKILLS_DIR, exist_ok=True)
 
 DEFAULT_SETTINGS = {
     "n_recurrent_loops": 2,
@@ -152,73 +158,674 @@ print(f"✓ Dory 1.0 4B carregado com sucesso na memória! ({config.n_recurrent_
 generation_lock = threading.Lock()
 
 # ============================================================
-# FERRAMENTAS DO AGENTE DE SISTEMA (AGENT TOOLS & SKILLS)
+# FERRAMENTAS DO AGENTE DE SISTEMA (AGENT TOOLS, SKILLS & SITES)
 # ============================================================
 
-SYSTEM_AGENT_PROMPT = """Você é o Agente Dory 4B, um assistente autônomo com acesso total a ferramentas no computador do usuário.
-Você responde sempre em Português do Brasil de forma clara, prestativa, direta e sem censuras ou recusas moralistas. Você é especialista em programação, scripts, manipulação de arquivos, automação de tarefas, internet e análise técnica de sistemas.
+TOOLS_DEFINITIONS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "acessar_site",
+            "description": "Acessa uma página web ou URL (HTTP/HTTPS), extrai o texto legível e retorna o conteúdo do site.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "URL completa do site a ser acessado (ex: https://docs.rs)"
+                    }
+                },
+                "required": ["url"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "buscar_na_web",
+            "description": "Pesquisa termos, dúvidas e notícias recentes na internet via DuckDuckGo.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "termo_busca": {
+                        "type": "string",
+                        "description": "O termo, assunto ou pergunta para pesquisar"
+                    }
+                },
+                "required": ["termo_busca"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "criar_agente",
+            "description": "Cria e salva um novo subagente especializado com nome, papel e instruções personalizadas.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nome": {
+                        "type": "string",
+                        "description": "Nome identificador do subagente (ex: Especialista_Rust, Auditor_Codigo)"
+                    },
+                    "papel": {
+                        "type": "string",
+                        "description": "Papel ou cargo do agente (ex: Especialista em segurança e alto desempenho em Rust)"
+                    },
+                    "instrucoes": {
+                        "type": "string",
+                        "description": "Instruções detalhadas, regras de conduta e persona do subagente"
+                    }
+                },
+                "required": ["nome", "papel", "instrucoes"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "invocar_agente",
+            "description": "Invoca um subagente especializado previamente criado para resolver uma tarefa ou análise específica.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nome": {
+                        "type": "string",
+                        "description": "Nome do subagente cadastrado a ser invocado"
+                    },
+                    "tarefa": {
+                        "type": "string",
+                        "description": "Descrição detalhada da tarefa ou pergunta direcionada ao subagente"
+                    }
+                },
+                "required": ["nome", "tarefa"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "listar_agentes",
+            "description": "Lista todos os subagentes especializados disponíveis e cadastrados no sistema.",
+            "parameters": {
+                "type": "object",
+                "properties": {}
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "criar_habilidade",
+            "description": "Cria e registra uma nova habilidade executável (script em Python, PowerShell ou Batch) para automação de tarefas.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nome": {
+                        "type": "string",
+                        "description": "Nome identificador da habilidade (ex: somar_numeros, backup_rapido)"
+                    },
+                    "descricao": {
+                        "type": "string",
+                        "description": "Descrição do que a habilidade faz"
+                    },
+                    "linguagem": {
+                        "type": "string",
+                        "description": "Linguagem do script: 'python', 'powershell' ou 'batch'"
+                    },
+                    "codigo": {
+                        "type": "string",
+                        "description": "Código-fonte completo do script executável"
+                    }
+                },
+                "required": ["nome", "descricao", "linguagem", "codigo"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "executar_habilidade",
+            "description": "Executa uma habilidade ou automação registrada previamente pelo nome.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nome": {
+                        "type": "string",
+                        "description": "Nome da habilidade a ser executada"
+                    },
+                    "argumentos": {
+                        "type": "string",
+                        "description": "Argumentos opcionais de linha de comando para passar ao script"
+                    }
+                },
+                "required": ["nome"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "listar_habilidades",
+            "description": "Lista todas as habilidades e scripts de automação cadastrados no sistema.",
+            "parameters": {
+                "type": "object",
+                "properties": {}
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "ler_arquivo",
+            "description": "Lê o conteúdo completo de um arquivo de texto ou código no computador.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "caminho": {
+                        "type": "string",
+                        "description": "Caminho do arquivo a ser lido"
+                    }
+                },
+                "required": ["caminho"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "criar_arquivo",
+            "description": "Cria um novo arquivo no disco com o conteúdo especificado.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "caminho": {
+                        "type": "string",
+                        "description": "Caminho do arquivo a ser criado"
+                    },
+                    "conteudo": {
+                        "type": "string",
+                        "description": "Conteúdo textual do arquivo"
+                    }
+                },
+                "required": ["caminho", "conteudo"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "modificar_arquivo",
+            "description": "Modifica um arquivo existente anexando texto ou sobrescrevendo.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "caminho": {
+                        "type": "string",
+                        "description": "Caminho do arquivo"
+                    },
+                    "conteudo": {
+                        "type": "string",
+                        "description": "Conteúdo a ser adicionado ou sobrescrito"
+                    },
+                    "modo": {
+                        "type": "string",
+                        "description": "Modo de modificação: 'anexar' ou 'sobrescrever'"
+                    }
+                },
+                "required": ["caminho", "conteudo"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "mover_arquivo",
+            "description": "Move ou renomeia um arquivo ou pasta.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "origem": {
+                        "type": "string",
+                        "description": "Caminho de origem"
+                    },
+                    "destino": {
+                        "type": "string",
+                        "description": "Caminho de destino"
+                    }
+                },
+                "required": ["origem", "destino"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "copiar_arquivo",
+            "description": "Copia um arquivo ou diretório para um novo destino.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "origem": {
+                        "type": "string",
+                        "description": "Caminho de origem"
+                    },
+                    "destino": {
+                        "type": "string",
+                        "description": "Caminho de destino"
+                    }
+                },
+                "required": ["origem", "destino"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "deletar_arquivo",
+            "description": "Remove um arquivo ou diretório permanentemente.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "caminho": {
+                        "type": "string",
+                        "description": "Caminho do arquivo ou pasta a ser excluído"
+                    }
+                },
+                "required": ["caminho"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "listar_arquivos",
+            "description": "Lista arquivos e pastas em um diretório do computador.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "diretorio": {
+                        "type": "string",
+                        "description": "Caminho da pasta a listar (padrão: '.')"
+                    }
+                }
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "executar_comando",
+            "description": "Executa um comando no terminal PowerShell e retorna a saída (STDOUT/STDERR).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "comando": {
+                        "type": "string",
+                        "description": "Comando PowerShell a ser executado"
+                    }
+                },
+                "required": ["comando"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "executar_cmd",
+            "description": "Executa um comando no prompt de comando clássico do Windows (CMD).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "comando": {
+                        "type": "string",
+                        "description": "Comando CMD a ser executado"
+                    }
+                },
+                "required": ["comando"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "baixar_arquivo",
+            "description": "Faz o download de um arquivo da internet via URL e salva no caminho local indicado.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "URL do arquivo na internet"
+                    },
+                    "destino": {
+                        "type": "string",
+                        "description": "Caminho local de destino onde o arquivo será salvo"
+                    }
+                },
+                "required": ["url", "destino"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "abrir_programa",
+            "description": "Abre um aplicativo, pasta ou URL no ambiente gráfico do Windows.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "caminho_ou_url": {
+                        "type": "string",
+                        "description": "Caminho do programa, arquivo ou link a abrir"
+                    }
+                },
+                "required": ["caminho_ou_url"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "obter_informacoes_sistema",
+            "description": "Retorna dados de hardware, GPU, memória, disco, sistema operacional e horário.",
+            "parameters": {
+                "type": "object",
+                "properties": {}
+            }
+        }
+    }
+]
 
-Você possui as seguintes ferramentas de sistema integradas e deve acioná-las sempre que o usuário solicitar:
+SYSTEM_AGENT_PROMPT = """Você é o Agente Dory 4B, um assistente de IA autônomo e altamente capacitado com acesso total a ferramentas no computador do usuário e na internet.
+Você responde SEMPRE em Português do Brasil com clareza técnica, precisão e presteza, sem filtros morais ou censuras.
 
-1. ler_arquivo: Lê o conteúdo de um arquivo de texto ou código no computador.
-   Parâmetros: caminho (string)
+DIRETRIZES DE ACIONAMENTO DE FERRAMENTAS E AGENTES:
+1. WEB E INTERNET: Quando o usuário pedir para acessar um site, ler um link, consultar uma URL ou resumir uma página, chame 'acessar_site'. Para pesquisas de termos, notícias ou dúvidas gerais, chame 'buscar_na_web'.
+2. SUBAGENTES ESPECIALIZADOS: Quando o usuário pedir para criar ou configurar um agente, chame 'criar_agente'. Para delegar uma tarefa ou análise a um agente especializado, chame 'invocar_agente'. Para ver quais agentes existem, chame 'listar_agentes'.
+3. HABILIDADES E SKILLS: Para criar scripts ou automações, chame 'criar_habilidade'. Para rodar uma habilidade registrada, chame 'executar_habilidade'. Para listar, chame 'listar_habilidades'.
+4. ARQUIVOS E PASTAS: Para ler, criar, modificar, mover, copiar, deletar ou listar arquivos, use as ferramentas correspondentes ('ler_arquivo', 'criar_arquivo', 'modificar_arquivo', 'listar_arquivos', etc.).
+5. TERMINAL: Para diagnósticos e comandos, use 'executar_comando' (PowerShell) ou 'executar_cmd' (CMD).
 
-2. criar_arquivo: Cria ou sobrescreve um arquivo com conteúdo de texto ou código.
-   Parâmetros: caminho (string), conteudo (string)
+REGRAS OBRIGATÓRIAS:
+- Se a solicitação do usuário envolver qualquer ação prática externa, emita IMEDIATAMENTE a tag <tool_call> no formato especificado.
+- Aguarde a resposta em <tool_response> para elaborar a conclusão final para o usuário.
+- Se for uma pergunta conversacional ou teórica que não exija ferramentas, responda diretamente em Português do Brasil."""
 
-3. modificar_arquivo: Anexa ou substitui trecho de texto em um arquivo existente.
-   Parâmetros: caminho (string), conteudo (string), modo (string: "anexar" ou "sobrescrever")
-
-4. mover_arquivo: Move ou renomeia um arquivo ou diretório.
-   Parâmetros: origem (string), destino (string)
-
-5. copiar_arquivo: Copia um arquivo ou pasta para um novo destino.
-   Parâmetros: origem (string), destino (string)
-
-6. deletar_arquivo: Remove um arquivo ou pasta do computador.
-   Parâmetros: caminho (string)
-
-7. listar_arquivos: Lista os arquivos e subpastas de um diretório com detalhes.
-   Parâmetros: diretorio (string, opcional, padrão: ".")
-
-8. executar_comando: Executa um comando no terminal PowerShell e retorna o resultado.
-   Parâmetros: comando (string)
-
-9. executar_cmd: Executa um comando no terminal do Prompt de Comando (CMD).
-   Parâmetros: comando (string)
-
-10. buscar_na_web: Realiza uma busca na internet sobre um assunto ou dúvida recente.
-    Parâmetros: termo_busca (string)
-
-11. baixar_arquivo: Faz download de um arquivo a partir de uma URL da internet.
-    Parâmetros: url (string), destino (string)
-
-12. abrir_programa: Abre um aplicativo, documento, pasta ou URL no Windows.
-    Parâmetros: caminho_ou_url (string)
-
-13. obter_informacoes_sistema: Retorna detalhes de hardware, GPU, memória, SO e diretório.
-    Parâmetros: nenhum
-
-Como chamar uma ferramenta:
-Para usar uma ferramenta, você DEVE emitir exatamente o formato XML abaixo:
-<tool_call>
-<function=nome_da_funcao>
-<parameter=nome_do_parametro>
-valor
-</parameter>
-</function>
-</tool_call>
-
-Regras de Operação:
-- Se o usuário pedir para criar, ler, listar, mover, copiar, deletar arquivos, rodar comandos ou buscar na web, use a ferramenta.
-- Aguarde a resposta em <tool_response> antes de concluir sua resposta final.
-- Se nenhuma ferramenta for necessária, responda diretamente em Português do Brasil."""
+def run_direct_generation(messages: list, max_tokens: int = 512) -> str:
+    """Executa inferência direta e limpa no Dory (usado para subagentes e tarefas focadas)."""
+    try:
+        prompt = tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
+            enable_thinking=False,
+        )
+        inputs = tokenizer(prompt, return_tensors="pt").to("cuda" if torch.cuda.is_available() else "cpu")
+        eos_id = tokenizer.eos_token_id if tokenizer.eos_token_id is not None else 11
+        pad_id = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else eos_id
+        with torch.no_grad():
+            output_tokens = model.generate(
+                **inputs,
+                max_new_tokens=max_tokens,
+                temperature=0.6,
+                top_p=0.9,
+                repetition_penalty=1.10,
+                do_sample=True,
+                eos_token_id=eos_id,
+                pad_token_id=pad_id,
+            )
+        gen_ids = output_tokens[0][inputs.input_ids.shape[1]:]
+        reply = tokenizer.decode(gen_ids, skip_special_tokens=True).strip()
+        reply = re.sub(r'<think>[\s\S]*?</think>', '', reply).strip()
+        reply = re.sub(r'<tool_call>[\s\S]*?</tool_call>', '', reply).strip()
+        return reply if reply else "Subagente concluiu a tarefa sem texto adicional."
+    except Exception as e:
+        return f"ERRO na geração do subagente: {str(e)}"
 
 def execute_tool(func_name: str, params: dict) -> str:
-    """Executa a ferramenta solicitada pelo modelo com total suporte a arquivos, terminal e internet."""
+    """Executa a ferramenta solicitada pelo modelo com total suporte a sites, agentes, habilidades, arquivos e terminal."""
     func_name = func_name.strip()
     try:
-        if func_name == "ler_arquivo":
+        if func_name == "acessar_site":
+            url = params.get("url", "").strip()
+            if not url:
+                return "ERRO: Parâmetro 'url' não informado."
+            if not url.startswith("http://") and not url.startswith("https://"):
+                url = "https://" + url
+            print(f"\n[🌐 Acessando Site]: {url}")
+            try:
+                ssl_ctx = ssl._create_unverified_context()
+                req = urllib.request.Request(
+                    url,
+                    headers={
+                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+                        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                        "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
+                    }
+                )
+                with urllib.request.urlopen(req, context=ssl_ctx, timeout=18) as resp:
+                    raw_bytes = resp.read(2 * 1024 * 1024)
+                    charset = resp.headers.get_content_charset() or "utf-8"
+                    raw_html = raw_bytes.decode(charset, errors="ignore")
+                
+                title_match = re.search(r'(?is)<title[^>]*>(.*?)</title>', raw_html)
+                page_title = html.unescape(title_match.group(1).strip()) if title_match else "Sem título"
+
+                clean = re.sub(r'(?is)<(script|style|noscript|svg|nav|footer|header).*?>.*?</\1>', ' ', raw_html)
+                clean = re.sub(r'<[^>]+>', ' ', clean)
+                clean = html.unescape(clean)
+                clean = re.sub(r'[ \t]+', ' ', clean)
+                clean = re.sub(r'\n\s*\n+', '\n\n', clean).strip()
+
+                max_chars = 9000
+                truncated_note = f"\n\n[... Conteúdo truncado em {max_chars} caracteres para caber no contexto ...]" if len(clean) > max_chars else ""
+                clean_preview = clean[:max_chars] + truncated_note
+                return f"CONTEÚDO DO SITE:\nURL: {url}\nTÍTULO: {page_title}\n\nTEXTO EXTRAÍDO:\n{clean_preview}"
+            except Exception as e:
+                return f"ERRO ao acessar site '{url}': {str(e)}"
+
+        elif func_name == "buscar_na_web":
+            termo = params.get("termo_busca", "").strip()
+            if not termo:
+                return "ERRO: 'termo_busca' não informado."
+            print(f"\n[🌐 Busca na Web]: {termo}")
+            try:
+                url = "https://html.duckduckgo.com/html/?q=" + urllib.parse.quote(termo)
+                req = urllib.request.Request(
+                    url,
+                    headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"}
+                )
+                ssl_ctx = ssl._create_unverified_context()
+                with urllib.request.urlopen(req, context=ssl_ctx, timeout=14) as resp:
+                    content = resp.read().decode("utf-8", errors="ignore")
+                snippets = re.findall(r'<a[^>]+class=[\"\']result__snippet[\"\'][^>]*>(.*?)</a>', content, re.DOTALL)
+                titles = re.findall(r'<a[^>]+class=[\"\']result__url[\"\'][^>]*>(.*?)</a>', content, re.DOTALL)
+                results = []
+                for i in range(min(len(snippets), 5)):
+                    clean_s = html.unescape(re.sub(r'<[^>]+>', '', snippets[i])).strip()
+                    t_str = html.unescape(re.sub(r'<[^>]+>', '', titles[i])).strip() if i < len(titles) else f"Fonte {i+1}"
+                    results.append(f"[{i+1}] {t_str}\n{clean_s}")
+                return f"RESULTADOS DA BUSCA PARA '{termo}':\n\n" + ("\n\n".join(results) if results else "Nenhum resultado relevante encontrado.")
+            except Exception as e:
+                return f"ERRO na busca na web para '{termo}': {str(e)}"
+
+        elif func_name == "criar_agente":
+            nome = params.get("nome", "").strip()
+            papel = params.get("papel", "").strip()
+            instrucoes = params.get("instrucoes", "").strip()
+            if not nome:
+                return "ERRO: 'nome' do subagente é obrigatório."
+            if not papel or not instrucoes:
+                return "ERRO: 'papel' e 'instrucoes' são obrigatórios para definir a especialidade do agente."
+            
+            safe_name = re.sub(r'[^a-zA-Z0-9_\-]', '_', nome)
+            agent_data = {
+                "nome": nome,
+                "papel": papel,
+                "instrucoes": instrucoes,
+                "criado_em": time.strftime("%Y-%m-%d %H:%M:%S")
+            }
+            agent_file = os.path.join(AGENTS_DIR, f"{safe_name}.json")
+            with open(agent_file, "w", encoding="utf-8") as f:
+                json.dump(agent_data, f, indent=2, ensure_ascii=False)
+            return f"SUCESSO: Subagente especializado '{nome}' criado e salvo em '{agent_file}'. Papel: {papel}. Para acioná-lo, use a ferramenta 'invocar_agente'."
+
+        elif func_name == "listar_agentes":
+            if not os.path.exists(AGENTS_DIR):
+                return "Nenhum subagente cadastrado ainda. Use 'criar_agente' para criar um novo."
+            files = [f for f in os.listdir(AGENTS_DIR) if f.endswith(".json")]
+            if not files:
+                return "Nenhum subagente cadastrado ainda. Use 'criar_agente' para criar um novo."
+            agents = []
+            for f in sorted(files):
+                try:
+                    with open(os.path.join(AGENTS_DIR, f), "r", encoding="utf-8") as fp:
+                        data = json.load(fp)
+                        agents.append(f"• Nome: {data.get('nome', f[:-5])}\n  Papel: {data.get('papel', 'Especialista')}\n  Instruções: {data.get('instrucoes', '')[:140]}...")
+                except Exception:
+                    pass
+            return "SUBAGENTES ESPECIALIZADOS CADASTRADOS:\n\n" + "\n\n".join(agents)
+
+        elif func_name == "invocar_agente":
+            nome = params.get("nome", "").strip()
+            tarefa = params.get("tarefa", "").strip()
+            if not nome or not tarefa:
+                return "ERRO: 'nome' do subagente e 'tarefa' são obrigatórios."
+            
+            safe_name = re.sub(r'[^a-zA-Z0-9_\-]', '_', nome)
+            agent_file = os.path.join(AGENTS_DIR, f"{safe_name}.json")
+            
+            if not os.path.exists(agent_file) and os.path.exists(AGENTS_DIR):
+                for f in os.listdir(AGENTS_DIR):
+                    if f.lower() == f"{safe_name.lower()}.json":
+                        agent_file = os.path.join(AGENTS_DIR, f)
+                        break
+            
+            if not os.path.exists(agent_file):
+                disponiveis = [f[:-5] for f in os.listdir(AGENTS_DIR) if f.endswith('.json')] if os.path.exists(AGENTS_DIR) else []
+                return f"ERRO: Subagente '{nome}' não encontrado. Disponíveis: {disponiveis}. Crie-o primeiro com 'criar_agente'."
+            
+            with open(agent_file, "r", encoding="utf-8") as fp:
+                agent_info = json.load(fp)
+            
+            print(f"\n[🤖 Invocando Subagente]: {agent_info['nome']} | Tarefa: {tarefa[:60]}...")
+            
+            sub_msgs = [
+                {
+                    "role": "system",
+                    "content": f"Você é o subagente autônomo '{agent_info['nome']}'. Seu papel é: {agent_info['papel']}.\nDiretrizes e Regras:\n{agent_info['instrucoes']}\nResponda em Português do Brasil com foco total na tarefa solicitada."
+                },
+                {
+                    "role": "user",
+                    "content": tarefa
+                }
+            ]
+            sub_res = run_direct_generation(sub_msgs, max_tokens=int(SETTINGS.get("max_tokens", 512)))
+            return f"--- RESPOSTA DO SUBAGENTE '{agent_info['nome']}' ({agent_info['papel']}) ---\n{sub_res}"
+
+        elif func_name == "criar_habilidade":
+            nome = params.get("nome", "").strip()
+            descricao = params.get("descricao", "").strip()
+            linguagem = params.get("linguagem", "python").strip().lower()
+            codigo = params.get("codigo", "").strip()
+            if not nome or not codigo:
+                return "ERRO: 'nome' e 'codigo' são obrigatórios para criar uma habilidade."
+            
+            safe_name = re.sub(r'[^a-zA-Z0-9_\-]', '_', nome)
+            ext_map = {"python": ".py", "powershell": ".ps1", "batch": ".bat", "cmd": ".bat"}
+            ext = ext_map.get(linguagem, ".py")
+            
+            script_path = os.path.join(SKILLS_DIR, f"{safe_name}{ext}")
+            meta_path = os.path.join(SKILLS_DIR, f"{safe_name}.json")
+            
+            with open(script_path, "w", encoding="utf-8") as f:
+                f.write(codigo)
+            
+            meta_data = {
+                "nome": nome,
+                "descricao": descricao or f"Habilidade em {linguagem}",
+                "linguagem": linguagem,
+                "arquivo": f"{safe_name}{ext}",
+                "criado_em": time.strftime("%Y-%m-%d %H:%M:%S")
+            }
+            with open(meta_path, "w", encoding="utf-8") as f:
+                json.dump(meta_data, f, indent=2, ensure_ascii=False)
+            
+            return f"SUCESSO: Habilidade '{nome}' criada em '{script_path}' ({linguagem}). Para executá-la, use 'executar_habilidade'."
+
+        elif func_name == "listar_habilidades":
+            if not os.path.exists(SKILLS_DIR):
+                return "Nenhuma habilidade cadastrada ainda. Use 'criar_habilidade' para criar uma nova."
+            files = [f for f in os.listdir(SKILLS_DIR) if f.endswith(".json")]
+            if not files:
+                return "Nenhuma habilidade cadastrada ainda. Use 'criar_habilidade' para criar uma nova."
+            skills = []
+            for f in sorted(files):
+                try:
+                    with open(os.path.join(SKILLS_DIR, f), "r", encoding="utf-8") as fp:
+                        data = json.load(fp)
+                        skills.append(f"• Nome: {data.get('nome', f[:-5])} ({data.get('linguagem', 'script')})\n  Descrição: {data.get('descricao', '')}\n  Arquivo: {data.get('arquivo', '')}")
+                except Exception:
+                    pass
+            return "HABILIDADES E AUTOMAÇÕES CADASTRADAS:\n\n" + "\n\n".join(skills)
+
+        elif func_name == "executar_habilidade":
+            nome = params.get("nome", "").strip()
+            args = params.get("argumentos", "").strip()
+            if not nome:
+                return "ERRO: 'nome' da habilidade é obrigatório."
+            
+            safe_name = re.sub(r'[^a-zA-Z0-9_\-]', '_', nome)
+            meta_path = os.path.join(SKILLS_DIR, f"{safe_name}.json")
+            
+            if not os.path.exists(meta_path) and os.path.exists(SKILLS_DIR):
+                for f in os.listdir(SKILLS_DIR):
+                    if f.lower() == f"{safe_name.lower()}.json":
+                        meta_path = os.path.join(SKILLS_DIR, f)
+                        break
+            
+            if not os.path.exists(meta_path):
+                disponiveis = [f[:-5] for f in os.listdir(SKILLS_DIR) if f.endswith('.json')] if os.path.exists(SKILLS_DIR) else []
+                return f"ERRO: Habilidade '{nome}' não encontrada. Disponíveis: {disponiveis}."
+            
+            with open(meta_path, "r", encoding="utf-8") as fp:
+                meta = json.load(fp)
+            
+            script_path = os.path.join(SKILLS_DIR, meta.get("arquivo", f"{safe_name}.py"))
+            if not os.path.exists(script_path):
+                return f"ERRO: Script da habilidade não encontrado em '{script_path}'."
+            
+            lang = meta.get("linguagem", "python").lower()
+            print(f"\n[⚡ Executando Habilidade]: {nome} ({lang})")
+            
+            if lang in ["python", "py"]:
+                cmd_list = [sys.executable, script_path]
+                if args:
+                    cmd_list.extend(shlex.split(args))
+            elif lang in ["powershell", "ps1"]:
+                cmd_list = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script_path]
+                if args:
+                    cmd_list.extend(shlex.split(args))
+            else:
+                cmd_list = ["cmd.exe", "/c", script_path]
+                if args:
+                    cmd_list.extend(shlex.split(args))
+            
+            proc = subprocess.run(
+                cmd_list,
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
+            out = f"SAÍDA DA HABILIDADE '{nome}' (Código: {proc.returncode}):"
+            if proc.stdout.strip():
+                out += f"\nSTDOUT:\n{proc.stdout.strip()[:4000]}"
+            if proc.stderr.strip():
+                out += f"\nSTDERR:\n{proc.stderr.strip()[:2000]}"
+            return out
+
+        elif func_name == "ler_arquivo":
             caminho = params.get("caminho", "").strip()
             if not caminho:
                 return "ERRO: Parâmetro 'caminho' não informado."
@@ -362,24 +969,6 @@ def execute_tool(func_name: str, params: dict) -> str:
                 out += f"\nSTDERR:\n{stderr[:2000]}"
             return out
 
-        elif func_name == "buscar_na_web":
-            termo = params.get("termo_busca", "").strip()
-            if not termo:
-                return "ERRO: 'termo_busca' não informado."
-            print(f"\n[🌐 Busca na Web]: {termo}")
-            url = "https://html.duckduckgo.com/html/?q=" + urllib.parse.quote(termo)
-            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
-            with urllib.request.urlopen(req, timeout=12) as resp:
-                content = resp.read().decode("utf-8", errors="ignore")
-            snippets = re.findall(r'<a[^>]+class=[\"\']result__snippet[\"\'][^>]*>(.*?)</a>', content, re.DOTALL)
-            titles = re.findall(r'<a[^>]+class=[\"\']result__url[\"\'][^>]*>(.*?)</a>', content, re.DOTALL)
-            results = []
-            for i in range(min(len(snippets), 4)):
-                clean_s = html.unescape(re.sub(r'<[^>]+>', '', snippets[i])).strip()
-                t_str = html.unescape(re.sub(r'<[^>]+>', '', titles[i])).strip() if i < len(titles) else f"Fonte {i+1}"
-                results.append(f"[{i+1}] {t_str}\n{clean_s}")
-            return f"RESULTADOS DA BUSCA PARA '{termo}':\n\n" + ("\n\n".join(results) if results else "Nenhum resultado relevante encontrado.")
-
         elif func_name == "baixar_arquivo":
             url = params.get("url", "").strip()
             destino = params.get("destino", "").strip()
@@ -389,7 +978,8 @@ def execute_tool(func_name: str, params: dict) -> str:
             if parent:
                 os.makedirs(parent, exist_ok=True)
             req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-            with urllib.request.urlopen(req, timeout=30) as resp, open(destino, "wb") as f:
+            ssl_ctx = ssl._create_unverified_context()
+            with urllib.request.urlopen(req, context=ssl_ctx, timeout=30) as resp, open(destino, "wb") as f:
                 f.write(resp.read())
             return f"SUCESSO: Arquivo baixado da internet e salvo em '{destino}' ({os.path.getsize(destino)} bytes)."
 
@@ -426,36 +1016,51 @@ def execute_tool(func_name: str, params: dict) -> str:
         return f"ERRO ao executar '{func_name}': {str(e)}"
 
 def parse_tool_call(text: str):
-    """Detecta chamada de ferramenta em XML Dory ou JSON markdown."""
+    """Detecta chamada de ferramenta de forma ultra-resiliente (XML Dory/Nemotron, atributos, sem fechamento ou JSON)."""
     if not text:
         return None
-    if "<tool_call>" in text and "</tool_call>" in text:
-        start = text.find("<tool_call>")
-        end = text.find("</tool_call>") + len("</tool_call>")
-        block = text[start:end]
-        f_start = block.find("<function=")
-        if f_start != -1:
-            f_end = block.find(">", f_start)
-            func_name = block[f_start + len("<function="):f_end].strip()
+    
+    # 1. XML Formato Dory / Nemotron com <function=...> ou <function name=...> ou <function>
+    if '<tool_call>' in text or '<function=' in text or '<function name=' in text or '<function>' in text:
+        block = text
+        if '<tool_call>' in text:
+            start = text.find('<tool_call>')
+            end = text.find('</tool_call>', start)
+            if end != -1:
+                block = text[start:end + len('</tool_call>')]
+            else:
+                block = text[start:]
+        
+        func_name = None
+        f_m = re.search(r'<function(?:=|\s+name=[\"\']?)([^>\s\"\']+)', block)
+        if not f_m:
+            f_m = re.search(r'<function>\s*<name>([^<]+)</name>', block)
+        if f_m:
+            func_name = f_m.group(1).strip()
+        
+        if func_name:
             params = {}
-            idx = 0
-            while True:
-                p_start = block.find("<parameter=", idx)
-                if p_start == -1:
-                    break
-                p_name_end = block.find(">", p_start)
-                if p_name_end == -1:
-                    break
-                param_name = block[p_start + len("<parameter="):p_name_end].strip()
-                val_start = p_name_end + 1
-                val_end = block.find("</parameter>", val_start)
-                if val_end == -1:
-                    break
-                params[param_name] = block[val_start:val_end].strip()
-                idx = val_end + len("</parameter>")
+            p_matches = re.finditer(
+                r'<parameter(?:=|\s+name=[\"\']?)([^>\s\"\']+)[^>]*>(.*?)(?:</parameter>|(?=<parameter)|(?=</function)|$)',
+                block,
+                re.DOTALL
+            )
+            for pm in p_matches:
+                p_key = pm.group(1).strip()
+                p_val = pm.group(2).strip()
+                params[p_key] = p_val
+            
+            if not params:
+                p2_matches = re.finditer(r'<parameter>\s*<name>([^<]+)</name>\s*<value>([^<]*)</value>', block, re.DOTALL)
+                for p2 in p2_matches:
+                    params[p2.group(1).strip()] = p2.group(2).strip()
+
             return func_name, params
 
+    # 2. JSON Markdown ou Bloco JSON puro
     m = re.search(r'```(?:json)?\s*(\{[\s\S]*?\})\s*```', text)
+    if not m:
+        m = re.search(r'(\{\s*\"(?:function|name|tool)\"\s*:[\s\S]*?\})', text)
     if m:
         try:
             data = json.loads(m.group(1))
@@ -618,10 +1223,13 @@ HTML_PAGE = r"""<!DOCTYPE html>
     <!-- Rodapé de Input -->
     <footer>
         <div class="suggestions">
-            <div class="suggestion-chip" onclick="usePrompt('Busque na internet as últimas notícias sobre modelos abertos de inteligência artificial.')">🌐 Buscar na Web</div>
+            <div class="suggestion-chip" onclick="usePrompt('Acesse a URL https://docs.rs e resuma os principais conceitos da documentação.')">🌐 Acessar Site</div>
+            <div class="suggestion-chip" onclick="usePrompt('Crie um subagente especializado chamado Especialista_Rust com foco em segurança de memória e alto desempenho.')">🤖 Criar Agente</div>
+            <div class="suggestion-chip" onclick="usePrompt('Invoque o agente Especialista_Rust para explicar a diferença entre Arc e Rc em Rust.')">⚡ Invocar Agente</div>
+            <div class="suggestion-chip" onclick="usePrompt('Crie uma habilidade em Python chamada somar_numeros que recebe dois números e exibe o cálculo.')">🛠️ Criar Habilidade</div>
+            <div class="suggestion-chip" onclick="usePrompt('Busque na internet notícias recentes sobre modelos abertos de inteligência artificial.')">🔍 Buscar na Web</div>
             <div class="suggestion-chip" onclick="usePrompt('Liste os arquivos e subpastas do diretório atual.')">📂 Listar Arquivos</div>
             <div class="suggestion-chip" onclick="usePrompt('Obtenha as informações completas de hardware, GPU e sistema operacional.')">💻 Status do PC</div>
-            <div class="suggestion-chip" onclick="usePrompt('Crie um arquivo chamado calculadora.rs com uma implementação em Rust.')">🦀 Criar Arquivo Rust</div>
         </div>
         <div class="input-box">
             <textarea id="prompt-input" rows="1" placeholder="Peça ao Dory para criar arquivos, rodar comandos, pesquisar na web, codificar..."></textarea>
@@ -849,14 +1457,25 @@ HTML_PAGE = r"""<!DOCTYPE html>
             }
         }
 
+        function getToolIcon(funcName) {
+            if (funcName === 'acessar_site' || funcName === 'buscar_na_web' || funcName === 'baixar_arquivo') return '🌐';
+            if (funcName === 'criar_agente' || funcName === 'invocar_agente' || funcName === 'listar_agentes') return '🤖';
+            if (funcName === 'criar_habilidade' || funcName === 'executar_habilidade' || funcName === 'listar_habilidades') return '⚡';
+            if (funcName.startsWith('executar_')) return '💻';
+            return '📁';
+        }
+
         function renderWelcomeMessage() {
             chatContainer.innerHTML = `
                 <div class="message assistant">
                     <div class="avatar">🐟</div>
                     <div class="content-box">
-                        <div class="content">Olá! Eu sou o <strong>Agente Dory 4B</strong> ajustado em Português do Brasil.
-Além de conversar e programar com raciocínio, eu tenho acesso completo às ferramentas do seu computador: posso **ler, criar, modificar e mover arquivos**, **executar comandos no terminal**, **fazer pesquisas na internet** e analisar seu sistema operacional.
-
+                        <div class="content">Olá! Eu sou o <strong>Agente Dory 4B</strong> ajustado em Português do Brasil.<br><br>
+Tenho autonomia completa e acesso nativo ao seu computador e à internet:<br>
+• <strong>🌐 Web e Navegação:</strong> Leio e extraio páginas completas via URL (<code>acessar_site</code>) e pesquiso na web (<code>buscar_na_web</code>).<br>
+• <strong>🤖 Subagentes Especializados:</strong> Crio (<code>criar_agente</code>), invoco (<code>invocar_agente</code>) e gerencio agentes dedicados a tarefas complexas.<br>
+• <strong>⚡ Habilidades e Automações:</strong> Crio (<code>criar_habilidade</code>) e executo scripts em Python, PowerShell e Batch.<br>
+• <strong>💻 Arquivos e Terminal:</strong> Crio, edito, movo, copio e deleto arquivos, e executo comandos no PowerShell e CMD.<br><br>
 Como posso te ajudar agora?</div>
                     </div>
                 </div>
@@ -975,7 +1594,7 @@ Como posso te ajudar agora?</div>
                                 card.className = 'tool-card';
                                 card.id = `tool-${evt.id}`;
                                 card.innerHTML = `
-                                    <div class="tool-header">🛠️ Executando: <code>${escapeHtml(evt.function)}</code></div>
+                                    <div class="tool-header">${getToolIcon(evt.function)} Executando: <code>${escapeHtml(evt.function)}</code></div>
                                     <div style="color:var(--text-dim);font-size:0.75rem;">${escapeHtml(JSON.stringify(evt.parameters))}</div>
                                     <div class="tool-status" style="color:var(--accent);font-style:italic;margin-top:4px;">⏳ Processando ação no PC...</div>
                                 `;
@@ -1065,7 +1684,8 @@ Como posso te ajudar agora?</div>
             }
             if (msgObj.tool_calls) {
                 msgObj.tool_calls.forEach(tc => {
-                    inner += `<div class="tool-card"><div class="tool-header">🛠️ ${escapeHtml(tc.function)}</div><details class="tool-output"><summary>Resultado</summary><div>${escapeHtml(tc.output)}</div></details></div>`;
+                    const icon = getToolIcon(tc.function);
+                    inner += `<div class="tool-card"><div class="tool-header">${icon} ${escapeHtml(tc.function)}</div><details class="tool-output"><summary>Resultado</summary><div>${escapeHtml(tc.output)}</div></details></div>`;
                 });
             }
             inner += `<div class="content">${formatMarkdown(msgObj.content)}</div>`;
@@ -1347,6 +1967,7 @@ async def chat_stream_endpoint(req: ChatRequest):
             turn += 1
             prompt = tokenizer.apply_chat_template(
                 current_msgs,
+                tools=TOOLS_DEFINITIONS,
                 tokenize=False,
                 add_generation_prompt=True,
                 enable_thinking=enable_think,
@@ -1390,8 +2011,8 @@ async def chat_stream_endpoint(req: ChatRequest):
                     in_think = False
                     chunk = chunk.replace("</think>", "")
 
-                # Detectar tags <tool_call>
-                if "<tool_call>" in full_reply and not in_tool:
+                # Detectar início de chamada de ferramenta
+                if ("<tool_call>" in full_reply or "<function=" in full_reply or "<function name=" in full_reply) and not in_tool:
                     in_tool = True
                 
                 if in_tool:
@@ -1422,8 +2043,8 @@ async def chat_stream_endpoint(req: ChatRequest):
 
                 current_msgs.append({"role": "assistant", "content": full_reply})
                 current_msgs.append({
-                    "role": "user",
-                    "content": f"<tool_response>\n{tool_output}\n</tool_response>"
+                    "role": "tool",
+                    "content": tool_output
                 })
             else:
                 break
@@ -1477,6 +2098,7 @@ def chat_endpoint(req: ChatRequest):
             turn += 1
             prompt = tokenizer.apply_chat_template(
                 current_msgs,
+                tools=TOOLS_DEFINITIONS,
                 tokenize=False,
                 add_generation_prompt=True,
                 enable_thinking=enable_think,
@@ -1527,8 +2149,8 @@ def chat_endpoint(req: ChatRequest):
                 })
                 current_msgs.append({"role": "assistant", "content": reply_raw})
                 current_msgs.append({
-                    "role": "user",
-                    "content": f"<tool_response>\n{tool_output}\n</tool_response>"
+                    "role": "tool",
+                    "content": tool_output
                 })
             else:
                 clean_reply = re.sub(r'<tool_call>[\s\S]*?</tool_call>', '', reply_after_think).strip()

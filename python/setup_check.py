@@ -131,7 +131,11 @@ def configure_user_settings(hw):
     """Apresenta o menu interativo e salva as preferências em config/settings.json."""
     config_dir = "config"
     chats_dir = os.path.join(config_dir, "chats")
+    agents_dir = os.path.join(config_dir, "agents")
+    skills_dir = os.path.join(config_dir, "skills")
     os.makedirs(chats_dir, exist_ok=True)
+    os.makedirs(agents_dir, exist_ok=True)
+    os.makedirs(skills_dir, exist_ok=True)
     settings_file = os.path.join(config_dir, "settings.json")
 
     force_reconfig = "--reconfig" in sys.argv

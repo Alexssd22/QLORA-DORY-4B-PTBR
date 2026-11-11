@@ -1,0 +1,7 @@
+{
+  "nome": "limpar_temporarios",
+  "descricao": "Remove caches temporários (__pycache__ e *.pyc) do diretório do projeto com segurança.",
+  "linguagem": "batch",
+  "arquivo": "limpar_temporarios.bat",
+  "criado_em": "2026-11-11 20:00:00"
+}

@@ -1,0 +1,7 @@
+{
+  "nome": "diagnostico_sistema",
+  "descricao": "Coleta e exibe diagnóstico técnico do hardware, GPU, memória, disco e ambiente Python.",
+  "linguagem": "python",
+  "arquivo": "diagnostico_sistema.py",
+  "criado_em": "2026-11-11 20:00:00"
+}
