@@ -6,7 +6,7 @@ pub fn get_all_samples() -> Vec<(String, String)> {
     // ============================================================
     samples.push((
         "Olá! Quem é você e o que você é capaz de fazer?".to_string(),
-        "Olá! Eu sou a Dory 1.0 4B PT-BR, um modelo de inteligência artificial autônomo baseado na arquitetura nGPT e afinado para o Português do Brasil.\n\nEu sou capaz de:\n1. **Conversar e tirar dúvidas** com fluência em português do Brasil.\n2. **Programar em linguagens modernas**, com forte especialização e preferência por **Rust** e automações em Python.\n3. **Atuar como agente autônomo no seu computador**, com permissão para ler, criar, listar e excluir arquivos, além de executar comandos no terminal PowerShell e verificar o estado do sistema.".to_string(),
+        "Olá! Eu sou a Dory 1.0 4B PT-BR, uma inteligência artificial assistente autônoma desenvolvida com arquitetura nGPT e afinada para o Português do Brasil.\n\nEu sou capaz de:\n1. **Conversar e tirar dúvidas** com fluência gramatical em português brasileiro.\n2. **Desenvolver códigos limpos e eficientes**, priorizando Rust e automações em Python.\n3. **Operar como agente autônomo no seu computador**, com ferramentas para ler, criar, listar e remover arquivos, rodar comandos no PowerShell e diagnosticar hardware.\n\nComo posso ajudar você hoje?".to_string(),
     ));
 
     samples.push((
@@ -46,7 +46,7 @@ pub fn get_all_samples() -> Vec<(String, String)> {
 
     samples.push((
         "Quem é você?".to_string(),
-        "Eu sou a Dory 1.0 4B PT-BR, uma inteligência artificial assistente autônoma com raciocínio rápido, ajustada em Português do Brasil e focada em desenvolvimento de software, automação e suporte técnico ao seu computador.".to_string(),
+        "Eu sou a Dory 1.0 4B PT-BR, sua inteligência artificial assistente autônoma com alta velocidade, raciocínio em Português do Brasil e acesso a ferramentas do sistema.".to_string(),
     ));
 
     samples.push((
@@ -69,27 +69,27 @@ pub fn get_all_samples() -> Vec<(String, String)> {
     // ============================================================
     samples.push((
         "Explique de forma concisa o que é a linguagem de programação Rust e por que ela é tão rápida e segura.".to_string(),
-        "Rust é uma linguagem de programação compilada de sistemas, focada em alto desempenho, segurança de memória e concorrência sem coletor de lixo (Garbage Collector).\n\nEla é tão rápida e segura pelos seguintes motivos fundamentais:\n\n1. **Velocidade Nativa:** Compila diretamente para código de máquina altamente otimizado via LLVM, sem custo de máquina virtual ou pausas de garbage collection.\n2. **Segurança de Memória em Tempo de Compilação:** Seu sistema pioneiro de Posse e Empréstimo (*Ownership* e *Borrowing*) impede em tempo de compilação falhas clássicas como ponteiros nulos (*null pointer dereferences*), uso após liberação (*use-after-free*) e vazamentos de memória.\n3. **Concorrência Segura:** O compilador impede condições de corrida (*data races*) entre múltiplas threads antes mesmo do programa ser executado.\n4. **Abstrações de Custo Zero:** Recursos de alto nível como iterators, pattern matching e generics não impõem qualquer penalidade de desempenho em tempo de execução.".to_string(),
+        "Rust é uma linguagem de programação compilada de sistemas, focada em alto desempenho, segurança de memória e concorrência sem coletor de lixo (Garbage Collector).\n\nEla é rápida e segura pelos seguintes motivos fundamentais:\n\n1. **Velocidade Nativa:** Compila diretamente para código de máquina nativo altamente otimizado via LLVM, com abstrações de custo zero (*zero-cost abstractions*).\n2. **Segurança de Memória em Tempo de Compilação:** Seu sistema de Posse e Empréstimo (*Ownership* e *Borrowing*) elimina em tempo de compilação falhas como ponteiros nulos (*null pointers*), uso após liberação (*use-after-free*) e vazamento de memória.\n3. **Concorrência Segura:** O compilador impede condições de corrida (*data races*) entre múltiplas threads antes da execução.\n4. **Sem Garbage Collector:** Não sofre pausas de coleta de lixo (*stop-the-world*), garantindo latência ultrabaixa e determinística.".to_string(),
     ));
 
     samples.push((
         "O que é um Garbage Collector e quais são suas vantagens e desvantagens?".to_string(),
-        "O **Garbage Collector (GC)** é um componente de tempo de execução (*runtime*) presente em linguagens como Java, Python, C# e Go, responsável por gerenciar a memória automaticamente, identificando e desalocando objetos que não são mais referenciados pelo programa.\n\n### Vantagens:\n- **Produtividade:** O desenvolvedor não precisa alocar e desalocar memória manualmente.\n- **Prevenção de Falhas:** Reduz drasticamente erros como *dangling pointers* e liberações duplas (*double free*).\n\n### Desvantagens:\n- **Pausas de Execução (*Stop-the-World*):** O GC pode interromper temporariamente o fluxo do programa para varrer a memória, prejudicando sistemas de tempo real ou jogos.\n- **Maior Consumo de RAM:** Mantém objetos alocados por mais tempo até o próximo ciclo de coleta.\n- **Previsibilidade Menor:** O desenvolvedor não tem controle determinístico sobre o momento exato em que a memória será liberada.".to_string(),
+        "O **Garbage Collector (GC)** é um gerenciador de memória automático presente em linguagens como Java, Python, C# e Go, responsável por identificar e desalocar dados que não são mais utilizados pelo programa.\n\n### Vantagens:\n- **Produtividade:** O programador não precisa alocar e desalocar memória manualmente.\n- **Segurança:** Previne erros de ponteiros soltos (*dangling pointers*) e liberações duplas (*double free*).\n\n### Desvantagens:\n- **Pausas na Execução (*Stop-the-World*):** Pode interromper a execução para varrer a memória, prejudicando sistemas de tempo real.\n- **Maior Consumo de RAM:** Retém objetos na memória por mais tempo até o próximo ciclo de coleta.\n- **Menor Previsibilidade:** O momento exato da liberação de memória não é controlado pelo programador.".to_string(),
     ));
 
     samples.push((
         "Qual é a diferença entre concorrência e paralelismo?".to_string(),
-        "Embora frequentemente usados como sinônimos, possuem conceitos distintos:\n\n- **Concorrência:** É a capacidade de lidar com múltiplas tarefas ao mesmo tempo através de intercalação. Um único núcleo de CPU pode executar concorrência alternando rapidamente o contexto entre tarefas.\n- **Paralelismo:** É a execução simultânea real de múltiplas tarefas em diferentes núcleos físicos de processamento no exato mesmo instante de tempo.\n\nEm resumo: Concorrência trata da **estrutura** do programa; paralelismo trata da **execução** física.".to_string(),
+        "Embora frequentemente usados como sinônimos, possuem conceitos distintos:\n\n- **Concorrência:** É a capacidade de gerenciar múltiplas tarefas simultaneamente através de intercalação. Um único núcleo de CPU pode alternar entre tarefas concorrentes.\n- **Paralelismo:** É a execução simultânea real de múltiplas tarefas em núcleos físicos de processamento distintos no mesmo instante de tempo.\n\nEm resumo: Concorrência trata da **estrutura** do software; paralelismo trata da **execução física** no hardware.".to_string(),
     ));
 
     samples.push((
         "O que significa compilação JIT versus compilação AOT?".to_string(),
-        "A diferença central está no momento em que o código-fonte ou bytecode é transformado em linguagem de máquina:\n\n1. **AOT (*Ahead-Of-Time*):** A compilação ocorre antes da distribuição ou execução do programa (como em C, C++ e Rust). O binário gerado é executado diretamente pelo hardware com inicialização instantânea e máxima previsibilidade.\n2. **JIT (*Just-In-Time*):** A compilação ocorre durante a própria execução do programa (como na JVM do Java ou na V8 do JavaScript). O ambiente interpreta o bytecode inicialmente e compila para código de máquina apenas os trechos mais executados (*hot paths*), otimizando com base no comportamento em tempo real.".to_string(),
+        "A diferença central está no momento em que o código é convertido em instruções de máquina:\n\n1. **AOT (*Ahead-Of-Time*):** O código é compilado antes da distribuição ou execução (como em C, C++ e Rust). O binário nativo executa imediatamente com inicialização rápida e máxima previsibilidade.\n2. **JIT (*Just-In-Time*):** O código ou bytecode é compilado em tempo de execução (como na JVM do Java e na V8 do JavaScript), otimizando trechos críticos (*hot paths*) com base no comportamento dinâmico.".to_string(),
     ));
 
     samples.push((
         "O que é o modelo de Ownership e Borrowing do Rust?".to_string(),
-        "O modelo de **Ownership (Posse)** e **Borrowing (Empréstimo)** é o alicerce que permite ao Rust garantir segurança de memória sem necessitar de Garbage Collector:\n\n### As Três Regras de Ownership:\n1. Cada valor em Rust tem um dono (uma variável).\n2. Só pode haver um único dono por vez.\n3. Quando o dono sai de escopo, o valor é automaticamente destruído e sua memória liberada.\n\n### As Regras de Borrowing:\n- Você pode ter **qualquer número de referências imutáveis** (`&T`) a um dado.\n- OU você pode ter **uma única referência mutável** (`&mut T`) por vez.\n- Essas regras são verificadas estaticamente pelo *Borrow Checker*, garantindo ausência total de condições de corrida (*data races*).".to_string(),
+        "O modelo de **Ownership (Posse)** e **Borrowing (Empréstimo)** é o alicerce que permite ao Rust garantir segurança de memória sem Garbage Collector:\n\n### Regras de Ownership:\n1. Cada valor em Rust possui um único dono (variável).\n2. Só pode existir um único dono por vez.\n3. Quando o dono sai de escopo, a memória do valor é liberada automaticamente.\n\n### Regras de Borrowing:\n- Você pode ter **múltiplas referências imutáveis** (`&T`) ao mesmo dado.\n- OU você pode ter **uma única referência mutável** (`&mut T`) por vez.\n- Essas regras são verificadas estaticamente pelo compilador (*Borrow Checker*).".to_string(),
     ));
 
     // ============================================================
@@ -97,7 +97,12 @@ pub fn get_all_samples() -> Vec<(String, String)> {
     // ============================================================
     samples.push((
         "Escreva uma função simples em Rust que calcula o fatorial de um número inteiro positivo.".to_string(),
-        "Aqui está uma implementação limpa, segura e idiomática em Rust para calcular o fatorial de um número inteiro positivo:\n\n```rust\npub fn fatorial(n: u64) -> u64 {\n    let mut resultado = 1;\n    for i in 2..=n {\n        resultado *= i;\n    }\n    resultado\n}\n\nfn main() {\n    let numero = 5;\n    let resultado = fatorial(numero);\n    println!(\"O fatorial de {} é: {}\", numero, resultado);\n}\n```\n\n### Explicação:\n- **Iterativo:** Utiliza o intervalo inclusivo `2..=n`, evitando recursão desnecessária e consumo de pilha (*stack*).\n- **Desempenho:** Complexidade de tempo $O(n)$ e consumo de memória constante $O(1)$.\n- **Tipagem:** Usa `u64` para suportar fatoriais de valores inteiros positivos.".to_string(),
+        "Aqui está uma implementação simples, segura e idiomática em Rust para calcular o fatorial de um número inteiro positivo:\n\n```rust\npub fn factorial(n: u64) -> u64 {\n    let mut res = 1;\n    for i in 2..=n {\n        res *= i;\n    }\n    res\n}\n\nfn main() {\n    let numero = 5;\n    let resultado = factorial(numero);\n    println!(\"O fatorial de {} é: {}\", numero, resultado);\n}\n```\n\n### Detalhes:\n- **Iterativa:** Usa `2..=n`, garantindo complexidade $O(n)$ de tempo e $O(1)$ de memória.\n- **Sem recursão:** Evita estouro de pilha (*stack overflow*) para valores maiores.\n- **Tipagem estrita:** Utiliza `u64` para suportar inteiros positivos.".to_string(),
+    ));
+
+    samples.push((
+        "Escreva uma função em Rust que calcule o fatorial usando iterators de forma funcional.".to_string(),
+        "Em Rust idiomático, podemos calcular o fatorial em uma única linha usando iterators e `.product()`:\n\n```rust\npub fn fatorial(n: u64) -> u64 {\n    (1..=n).product()\n}\n\nfn main() {\n    let n = 6;\n    println!(\"Fatorial de {}: {}\", n, fatorial(n));\n}\n```".to_string(),
     ));
 
     samples.push((
@@ -108,6 +113,11 @@ pub fn get_all_samples() -> Vec<(String, String)> {
     samples.push((
         "Escreva uma função em Rust que inverte uma string de forma segura com suporte a caracteres Unicode.".to_string(),
         "Aqui está uma função idiomática em Rust para inverter strings respeitando caracteres Unicode:\n\n```rust\npub fn inverter_string(texto: &str) -> String {\n    texto.chars().rev().collect()\n}\n\nfn main() {\n    let original = \"Olá, Brasil!\";\n    let invertida = inverter_string(original);\n    println!(\"Original: {}\", original);\n    println!(\"Invertida: {}\", invertida);\n}\n```\n\n### Detalhes:\n- `.chars()` itera sobre os pontos de código Unicode válidos (evitando quebrar bytes UTF-8 no meio).\n- `.rev()` inverte o iterador.\n- `.collect()` reconstrói a nova `String` de forma eficiente.".to_string(),
+    ));
+
+    samples.push((
+        "Como verificar se uma string é um palíndromo em Rust?".to_string(),
+        "```rust\npub fn eh_palindromo(palavra: &str) -> bool {\n    let chars: Vec<char> = palavra.chars().collect();\n    let mut inicio = 0;\n    let mut fim = chars.len().saturating_sub(1);\n\n    while inicio < fim {\n        if chars[inicio] != chars[fim] {\n            return false;\n        }\n        inicio += 1;\n        fim -= 1;\n    }\n    true\n}\n\nfn main() {\n    println!(\"radar: {}\", eh_palindromo(\"radar\"));\n    println!(\"rust: {}\", eh_palindromo(\"rust\"));\n}\n```".to_string(),
     ));
 
     samples.push((

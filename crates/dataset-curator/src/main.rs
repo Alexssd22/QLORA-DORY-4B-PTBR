@@ -93,8 +93,8 @@ fn main() -> Result<()> {
     let base_samples = dataset_samples::get_all_samples();
     println!("1. Amostras especializadas locais carregadas: {}", base_samples.len());
 
-    // Fator de sobreamostragem (45x) para garantir que Rust, Agente e PT-BR estejam presentes em todo lote
-    let oversample_factor = 45;
+    // Fator de sobreamostragem (50x) para garantir que Rust, Agente e PT-BR estejam presentes em todo lote
+    let oversample_factor = 50;
     for (user_q, assistant_a) in base_samples {
         for i in 0..oversample_factor {
             let q = if i == 0 {

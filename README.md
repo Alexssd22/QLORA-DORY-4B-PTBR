@@ -19,21 +19,24 @@ Este repositório contém os adaptadores **QLoRA**, os scripts de treinamento, o
 
 ---
 
-## 📊 Métricas de Treinamento e Convergência
+## 📊 Métricas de Treinamento e Convergência (Passo 1 ao 1000)
 
-Com a correção matemática da hiperesfera unitária (`justnorm` nas 96 camadas recorrentes do nGPT) e o isolamento de perda via mascaramento de prompt (`labels = -100`), o treinamento atingiu convergência de última geração no Português:
+Com a correção matemática da hiperesfera unitária (`justnorm` nas 96 camadas recorrentes do nGPT) e o isolamento de perda via mascaramento de prompt (`labels = -100`), o treinamento atingiu convergência histórica em Português do Brasil:
 
-| Etapa | Passo | Época | Train Loss (Resposta) | Eval Loss (Validação Cega) | Grad Norm |
-| :--- | :---: | :---: | :---: | :---: | :---: |
-| Inicial (Warmup) | 1 | 0.001 | 99.02 | — | 158.6 |
-| Warmup | 10 | 0.010 | 96.64 | — | 79.16 |
-| Convergência Inicial | 30 | 0.031 | 49.98 | — | 72.28 |
-| Estabilização | 50 | 0.052 | 35.66 | — | 89.61 |
-| Bloco 1 (Checkpoint-100) | 100 | 0.103 | 27.83 | **1.879** | 38.69 |
-| Refinamento Semântico | 150 | 0.155 | 26.11 | — | 48.46 |
-| **Final Consolidado (Checkpoint-200)** | **200** | **0.207** | **26.22** | **1.715** 🎯 | **42.98** |
+| Etapa | Passo | Perda de Validação (`eval_loss`) | Perplexidade (PPL) | Ganho de Certeza Acumulado |
+| :--- | :---: | :---: | :---: | :---: |
+| Inicial | 100 | 1.8799 | 6.55 | *Baseline inicial* |
+| Checkpoint | 200 | 1.7157 | 5.56 | +15,1% |
+| Checkpoint | 300 | 1.6141 | 5.02 | +23,3% |
+| Checkpoint | 400 | 1.5951 | 4.92 | +24,8% |
+| Checkpoint | 500 | 1.5848 | 4.88 | +25,5% |
+| Checkpoint | 600 | 1.5547 | 4.73 | +27,8% |
+| Checkpoint | 700 | 1.5462 | 4.69 | +28,4% |
+| Checkpoint | 800 | 1.4421 | 4.23 | +35,4% |
+| Checkpoint | 900 | 1.4211 | 4.14 | +36,8% |
+| **Final Consolidado** | **1000** | **1.4180** 🎯 | **4.13** 🚀 | **+37,0%** |
 
-*Nota: O dataset de treino foi expandido para **15.480 amostras** e **1.721 amostras de validação** utilizando o curador concorrente nativo em Rust (`crates/dataset-curator`).*
+*Nota: O dataset de treino foi expandido para **17.334 amostras de treino** e **1.926 amostras de validação** utilizando o curador concorrente nativo em Rust (`crates/dataset-curator`), com sobreamostragem de 50x em pares instrucionais finamente calibrados para concordância de gênero em PT-BR, formatação estrita de código Rust e modularização de raciocínio.*
 
 ---
 
@@ -45,7 +48,7 @@ Com a correção matemática da hiperesfera unitária (`justnorm` nas 96 camadas
 │       ├── train.jsonl             # Exemplos de treino balanceados em PT-BR
 │       └── eval.jsonl              # Exemplos de validação cega
 ├── models/
-│   └── dory-lora-ptbr/             # Adaptadores LoRA finais (Passo 420)
+│   └── dory-lora-ptbr/             # Adaptadores LoRA finais (Passo 1000)
 │       ├── adapter_config.json
 │       ├── adapter_model.safetensors
 │       ├── chat_template.jinja     # Template oficial NVIDIA com suporte a <think> e ferramentas
