@@ -616,22 +616,28 @@ def chat_completions(req: ChatCompletionRequest):
             inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
             streamer = TextStreamer(tokenizer, skip_prompt=True, skip_special_tokens=False)
 
+            eos_id = tokenizer.eos_token_id if tokenizer.eos_token_id is not None else 11
+            pad_id = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else eos_id
+
             t_start = time.time()
             with torch.no_grad():
                 output_tokens = model.generate(
                     **inputs,
                     streamer=streamer,
                     max_new_tokens=req.max_tokens or 384,
-                    temperature=req.temperature or 0.6,
+                    temperature=req.temperature or 0.65,
                     top_p=req.top_p or 0.9,
-                    repetition_penalty=1.18,
-                    no_repeat_ngram_size=3,
+                    repetition_penalty=1.10,
+                    no_repeat_ngram_size=0,
                     do_sample=True,
-                    pad_token_id=tokenizer.eos_token_id,
+                    eos_token_id=eos_id,
+                    pad_token_id=pad_id,
                 )
 
             gen_ids = output_tokens[0][inputs.input_ids.shape[1]:]
             reply_raw = tokenizer.decode(gen_ids, skip_special_tokens=False).strip()
+            if "<|im_end|>" in reply_raw:
+                reply_raw = reply_raw.split("<|im_end|>")[0].strip()
 
             # Extrair pensamento <think> se presente
             if "<think>" in reply_raw and "</think>" in reply_raw:

@@ -89,47 +89,31 @@ fn main() -> Result<()> {
     let mut all_conversations = Vec::new();
     let mut seen_hashes = HashSet::new();
 
-    // 1. Carregar amostras base especializadas (Programação, Linux, Segurança, Cotidiano)
+    // 1. Carregar amostras base especializadas (Programação em Rust, Agente, Ferramentas e PT-BR)
     let base_samples = dataset_samples::get_all_samples();
     println!("1. Amostras especializadas locais carregadas: {}", base_samples.len());
 
+    // Fator de sobreamostragem (35x) para garantir que Rust, Agente e PT-BR estejam presentes em todo lote
+    let oversample_factor = 35;
     for (user_q, assistant_a) in base_samples {
-        let conv_clean = Conversation {
-            messages: vec![
-                Message {
-                    role: "user".to_string(),
-                    content: user_q.clone(),
-                },
-                Message {
-                    role: "assistant".to_string(),
-                    content: assistant_a.clone(),
-                },
-            ],
-        };
-        let hash = compute_hash(&conv_clean);
-        if seen_hashes.insert(hash) {
-            all_conversations.push(conv_clean);
-        }
-
-        // Versão com ruído de digitação
-        let noisy_q = inject_noise(&user_q, &mut rng);
-        if noisy_q != user_q {
-            let conv_noisy = Conversation {
+        for i in 0..oversample_factor {
+            let q = if i == 0 {
+                user_q.clone()
+            } else {
+                inject_noise(&user_q, &mut rng)
+            };
+            all_conversations.push(Conversation {
                 messages: vec![
                     Message {
                         role: "user".to_string(),
-                        content: noisy_q,
+                        content: q,
                     },
                     Message {
                         role: "assistant".to_string(),
-                        content: assistant_a,
+                        content: assistant_a.clone(),
                     },
                 ],
-            };
-            let hash_noisy = compute_hash(&conv_noisy);
-            if seen_hashes.insert(hash_noisy) {
-                all_conversations.push(conv_noisy);
-            }
+            });
         }
     }
 
@@ -196,25 +180,23 @@ fn main() -> Result<()> {
         println!("   Exemplos externos válidos integrados: {}", added_external);
     }
 
-    // 3. Amostras de Experience Replay em Inglês (proteção de raciocínio profundo)
+    // 3. Amostras de Experience Replay em Inglês (proteção de raciocínio profundo, 25x)
     let replay_samples = dataset_samples::get_replay_samples();
     println!("3. Amostras de Experience Replay integradas: {}", replay_samples.len());
     for (user_q, assistant_a) in replay_samples {
-        let conv = Conversation {
-            messages: vec![
-                Message {
-                    role: "user".to_string(),
-                    content: user_q,
-                },
-                Message {
-                    role: "assistant".to_string(),
-                    content: assistant_a,
-                },
-            ],
-        };
-        let hash = compute_hash(&conv);
-        if seen_hashes.insert(hash) {
-            all_conversations.push(conv);
+        for _ in 0..25 {
+            all_conversations.push(Conversation {
+                messages: vec![
+                    Message {
+                        role: "user".to_string(),
+                        content: user_q.clone(),
+                    },
+                    Message {
+                        role: "assistant".to_string(),
+                        content: assistant_a.clone(),
+                    },
+                ],
+            });
         }
     }
 

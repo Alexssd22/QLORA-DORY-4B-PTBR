@@ -142,7 +142,7 @@ def main():
         lr_scheduler_type="cosine",
         warmup_steps=30,
         weight_decay=0.01,
-        max_steps=600,
+        max_steps=400,
         logging_steps=10,
         logging_first_step=True,
         eval_strategy="steps",
@@ -171,12 +171,20 @@ def main():
         data_collator=data_collator,
     )
 
+    # Identificar checkpoint prévio para continuar o refinamento
+    resume_checkpoint = None
+    if os.path.exists(os.path.join(OUTPUT_DIR, "checkpoint-200")):
+        resume_checkpoint = os.path.join(OUTPUT_DIR, "checkpoint-200")
+        print(f"\n[🔄 Retomando Treinamento] Checkpoint encontrado: {resume_checkpoint}")
+    elif os.path.exists(os.path.join(OUTPUT_DIR, "checkpoint-100")):
+        resume_checkpoint = os.path.join(OUTPUT_DIR, "checkpoint-100")
+        print(f"\n[🔄 Retomando Treinamento] Checkpoint encontrado: {resume_checkpoint}")
+
     print("\n" + "=" * 60)
-    print("Iniciando loop de treinamento limpo na RTX 4070 (600 passos)...")
+    print("Iniciando refinamento QLoRA na RTX 4070 até o passo 400...")
     print("=" * 60)
 
-    # Treino limpo a partir de inicialização pura (sem herdar checkpoints da matemática antiga)
-    trainer.train()
+    trainer.train(resume_from_checkpoint=resume_checkpoint)
 
     print("\nTreinamento concluído com sucesso!")
     print(f"Salvando adaptadores LoRA em: {OUTPUT_DIR}")

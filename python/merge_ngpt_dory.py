@@ -84,6 +84,17 @@ def main():
     merged_model.save_pretrained(OUTPUT_MERGED, safe_serialization=True)
     tokenizer.save_pretrained(OUTPUT_MERGED)
 
+    # Garantir eos_token_id e pad_token_id no config.json do modelo final
+    cfg_file = os.path.join(OUTPUT_MERGED, "config.json")
+    if os.path.exists(cfg_file):
+        with open(cfg_file, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+        cfg["eos_token_id"] = 11
+        cfg["pad_token_id"] = 11
+        with open(cfg_file, "w", encoding="utf-8") as f:
+            json.dump(cfg, f, indent=2)
+        print("Configuração final gravada com eos_token_id=11 e pad_token_id=11.")
+
     print("\n" + "=" * 60)
     print("Fusão concluída com sucesso!")
     print(f"O modelo final em BF16 está salvo em: {OUTPUT_MERGED}")

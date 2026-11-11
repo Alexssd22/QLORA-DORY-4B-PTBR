@@ -66,17 +66,21 @@ def run_bench():
         streamer = TextStreamer(tokenizer, skip_prompt=True, skip_special_tokens=True)
         t_start = time.time()
 
+        eos_id = tokenizer.eos_token_id if tokenizer.eos_token_id is not None else 11
+        pad_id = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else eos_id
+
         with torch.no_grad():
             output_tokens = model.generate(
                 **inputs,
                 streamer=streamer,
                 max_new_tokens=160,
-                temperature=0.6,
+                temperature=0.65,
                 top_p=0.9,
-                repetition_penalty=1.18,
-                no_repeat_ngram_size=3,
+                repetition_penalty=1.10,
+                no_repeat_ngram_size=0,
                 do_sample=True,
-                pad_token_id=tokenizer.eos_token_id,
+                eos_token_id=eos_id,
+                pad_token_id=pad_id,
             )
 
         t_elapsed = time.time() - t_start
