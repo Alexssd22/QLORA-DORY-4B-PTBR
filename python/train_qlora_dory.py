@@ -37,13 +37,13 @@ configuration_utils.PreTrainedConfig.validate_layer_type = lambda self: None
 
 MODEL_ID = "nvidia/NVIDIA-Nemotron-Labs-Dory1.0-4B-BF16"
 OUTPUT_DIR = "models/dory-lora-ptbr"
-TRAIN_DATA = "data/final/train_girias_balanced.jsonl"
-EVAL_DATA = "data/final/eval_girias_balanced.jsonl"
+TRAIN_DATA = "data/final/train_girias_cotidiano.jsonl"
+EVAL_DATA = "data/final/eval_girias_cotidiano.jsonl"
 STEPS_TO_RUN = 25
 
 def main():
     print("=" * 65)
-    print("Iniciando Treinamento QLoRA do Dory 1.0 4B - Gírias da Internet (25 Passos)")
+    print("Iniciando Treinamento QLoRA do Dory 1.0 4B - Gírias do Dia a Dia (25 Passos)")
     print("GPU:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else "Nenhuma")
     print(f"Dataset de Treino: {TRAIN_DATA}")
     print("=" * 65)
