@@ -37,13 +37,13 @@ configuration_utils.PreTrainedConfig.validate_layer_type = lambda self: None
 
 MODEL_ID = "nvidia/NVIDIA-Nemotron-Labs-Dory1.0-4B-BF16"
 OUTPUT_DIR = "models/dory-lora-ptbr"
-TRAIN_DATA = "data/final/train_girias_cotidiano.jsonl"
-EVAL_DATA = "data/final/eval_girias_cotidiano.jsonl"
+TRAIN_DATA = "data/final/train_remediacao_1375.jsonl"
+EVAL_DATA = "data/final/eval_remediacao_1375.jsonl"
 STEPS_TO_RUN = 25
 
 def main():
     print("=" * 65)
-    print("Iniciando Treinamento QLoRA do Dory 1.0 4B - Gírias do Dia a Dia (25 Passos)")
+    print("Iniciando Treinamento QLoRA do Dory 1.0 4B - Remediação Raciocínio & Anti-Loop (25 Passos)")
     print("GPU:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else "Nenhuma")
     print(f"Dataset de Treino: {TRAIN_DATA}")
     print("=" * 65)
@@ -196,7 +196,7 @@ def main():
 
     cumulative_target = latest_step + STEPS_TO_RUN
     print("\n" + "=" * 65)
-    print(f"Iniciando aprendizado de gírias ({STEPS_TO_RUN} passos) na RTX 4070...")
+    print(f"Iniciando treinamento de remediação ({STEPS_TO_RUN} passos) na RTX 4070...")
     print(f"Base de partida: Passo {latest_step} -> Meta acumulada: Passo {cumulative_target}")
     print("=" * 65)
 

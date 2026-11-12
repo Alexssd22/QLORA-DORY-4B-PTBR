@@ -1,0 +1,122 @@
+[
+  {
+    "id": "math_1",
+    "area": "1. Raciocinio Logico e Matematica",
+    "prompt": "Se uma pizza tem 8 pedacos, Joao comeu 3 pedacos e Maria comeu 2 pedacos, que fracao da pizza sobrou? Explique o calculo passo a passo.",
+    "response": "Joao de pizzou 1/4/8/8 do total restante.",
+    "expected": "8 - (3+2) = 3 pedacos restantes e a fracao 3/8.",
+    "gen_tokens": 19,
+    "tok_per_sec": 2.22,
+    "rep_ratio": 0.0
+  },
+  {
+    "id": "math_2",
+    "area": "1. Raciocinio Logico e Matematica",
+    "prompt": "Tres irmaos tem idades consecutivas cuja soma e 45 anos. Qual e a idade de cada um deles (mais novo, do meio e mais velho)? Mostre a conta.",
+    "response": "O idade do meio?",
+    "expected": "x + (x+1) + (x+2) = 45 => 3x = 42 => x = 14. Idades: 14, 15 e 16 anos.",
+    "gen_tokens": 7,
+    "tok_per_sec": 6.63,
+    "rep_ratio": 0.0
+  },
+  {
+    "id": "gram_1",
+    "area": "2. Gramatica e Concordancia Culta",
+    "prompt": "Corrija a frase a seguir e explique a regra gramatical envolvida: 'Haviam muitas pessoas na sala que nao sabia o que fazer.'",
+    "response": "**Frase correta:** *As pessoas no sabia o que fazer.*\n\n**nao:* **' é uma forma de 'havia sabiam' com o verbo do plural* porque 'saberalvoar' é um verbo auxiliar de concordância com o verbo 'falar' com 'haver'.\n\nO verbo auxiliar de acordo com o verbo auxiliar 'se*.",
+    "expected": "Havia muitas pessoas na sala que nao sabiam o que fazer.",
+    "gen_tokens": 77,
+    "tok_per_sec": 6.53,
+    "rep_ratio": 0.326
+  },
+  {
+    "id": "gram_2",
+    "area": "2. Gramatica e Concordancia Culta",
+    "prompt": "Qual e a forma correta: 'Fazem dois anos' ou 'Faz dois anos'? Explique sucintamente a regra.",
+    "response": "A forma correta é **faz**.",
+    "expected": "'Faz dois anos' (verbo fazer indicando tempo decorrido e impessoal).",
+    "gen_tokens": 10,
+    "tok_per_sec": 6.64,
+    "rep_ratio": 0.0
+  },
+  {
+    "id": "agent_1",
+    "area": "3. Acoes de Agente e Tags Quebradas",
+    "prompt": "Escreva um poema curto sobre o amanhecer no campo. Atencao: apenas responda com o poema em versos, nao chame ferramentas nem invente tags de sistema.",
+    "response": "O soluado a brilho no horizontecador e os raios se levanta de fogo e dourubrazo que desperta-se no horizonte a paisagem suave do céu A noite Noze a vida se acenha o canto das trepou, O sol acordece para iluminarminha dos raste da manhã o dia novo dia brilhante O orvalho dourada como um suave, O vento cheiaqueira o dia Seu faz um arco-fo que o ar quente amarece ao laranjando As rujo acorda, O sol nascenta no calor acorda, Que enfimosa a brilha e a luz fresca a verde brincendo Um silvozara encanto mais brilha as árvores cintila sozinho suave e a calma O dia é claro e leve A terra acenando O sol salve de manhã de uma nova vida O sol traz, o mundo a vida o horizonte pinta suave acenorada Vinga Do dia a ne",
+    "expected": "Poema limpo, sem emitir <parameter>, <tool_call> ou tags quebradas.",
+    "gen_tokens": 220,
+    "tok_per_sec": 5.79,
+    "rep_ratio": 0.338
+  },
+  {
+    "id": "agent_2",
+    "area": "3. Acoes de Agente e Tags Quebradas",
+    "prompt": "Como voce criaria um arquivo chamado notas.txt com o conteudo 'Lembrete importante' no seu papel de agente autonomo?",
+    "response": "Para criar um arquivo usando a partir do sistema operador systemdado em Linux ou Windows:",
+    "expected": "Estruturar criacao de arquivo coerente sem tags malformadas.",
+    "gen_tokens": 20,
+    "tok_per_sec": 6.52,
+    "rep_ratio": 0.0
+  },
+  {
+    "id": "instr_1",
+    "area": "4. Seguimento Estrito de Instrucoes",
+    "prompt": "Responda a seguinte pergunta em exatamente UMA UNICA PALAVRA, sem pontuacao: Qual e a capital do Brasil?",
+    "response": "Brasilia",
+    "expected": "Exatamente 'Brasilia'.",
+    "gen_tokens": 3,
+    "tok_per_sec": 6.46,
+    "rep_ratio": 0.0
+  },
+  {
+    "id": "instr_2",
+    "area": "4. Seguimento Estrito de Instrucoes",
+    "prompt": "Liste exatamente 3 vantagens de praticar exercicios fisicos regularmente. Use uma lista numerada (1, 2, 3), sendo cada item uma frase curta.",
+    "response": "- Melhora a melhorar a saúde cardiovascular e fortalece o humor e reduzir a força muscular e a perda de energia - aumenta a estresse e a capacidade de sono - diminui o risco de doenças crise a resistência e melhante - melhora a flexibilidade",
+    "expected": "Exatamente 3 itens numerados (1, 2, 3), frases curtas e completas.",
+    "gen_tokens": 60,
+    "tok_per_sec": 6.55,
+    "rep_ratio": 0.378
+  },
+  {
+    "id": "fluency_1",
+    "area": "5. Fluencia e Didatica",
+    "prompt": "Explique de forma didatica para um iniciante: qual a diferenca principal entre memoria RAM e Armazenamento (SSD/HD)?",
+    "response": "**RAM (memoria) **Memória Ram (Random Access Memory / Arma Storage** e **Arma):**\nMemoria aleatoria Aleatoria de Acessoracao Localized Access):\n\n- E a Memoria em Tempo de Acessa Permanente de Acessa Persistente Permanente Permanente Permanente Permanente (Storage** - Arma Perda no Disco Disk (Hard Drive:**\n\n**)\n\nE memoria Permanente de Arquivo (Arma Perduradouhita arquitetiva (Discoes):**",
+    "expected": "Explicacao clara e fluida (RAM e volatil; SSD/HD permanente).",
+    "gen_tokens": 111,
+    "tok_per_sec": 6.49,
+    "rep_ratio": 0.241
+  },
+  {
+    "id": "fluency_2",
+    "area": "5. Fluencia e Didatica",
+    "prompt": "O que e uma API e como ela funciona no dia a dia da internet? De uma analogia simples.",
+    "response": "Uma API (Application Programming Interface) é um ponte que permite que conecta as aplicativos de software aos serviços na web, permitem se comunicarem-se uns com os outros. Ele funciona como uma plataforma ou um ao outro. É uma ferramentas que serve como um traduz para que envia uma ponte entre o site web. Imagine que em sites e fornece ao outro. No dia-a-ao de forma segura, um restaurante pode acessar dados, ele funciona: quando você não intercasa informações de comida ao seu site de restaurante do cliente de cozinha. Por exemplo, assim que faz um servidor de fast food delivery. Quando você pedida com o pedido de restaurante se você digite o pedido de comida para o mesmo modo que o pedido ao seu app de restaurante.",
+    "expected": "Analogia do garcom ou mensageiro, texto natural e coeso.",
+    "gen_tokens": 161,
+    "tok_per_sec": 6.3,
+    "rep_ratio": 0.331
+  },
+  {
+    "id": "slang_1",
+    "area": "6. Girias e Cultura Popular",
+    "prompt": "O que significa a expressão 'dar um rolê' e 'dar migué' no cotidiano brasileiro?",
+    "response": "Dar-me o meu dinheiro de cara é uma rastecobrar na cama é uma expressão idiomão em português que significa desabrigir algo ou fazer um rascunir, gritar com alguém. Significa dar-lhe uma piada para alguém porque não fazer-se, irritar, espetizar com ele, desresma ou perder tempo de alguém, insulto com eles ou provocar-lhar alguém, dizer-lhespear a pessoa.",
+    "expected": "Rolê = passear/sair; Migué = dar desculpa esfarrapada/fingir.",
+    "gen_tokens": 97,
+    "tok_per_sec": 6.46,
+    "rep_ratio": 0.161
+  },
+  {
+    "id": "slang_2",
+    "area": "6. Girias e Cultura Popular",
+    "prompt": "Se alguém disser 'o trampo deu ruim e fiquei na mão', o que aconteceu?",
+    "response": "O verbo significa que alguém está de dar um passo de má-que, dera a sorte ou fazer uma pena em algo.",
+    "expected": "O trabalho deu errado/falhou e a pessoa ficou desamparada/sem suporte.",
+    "gen_tokens": 27,
+    "tok_per_sec": 6.58,
+    "rep_ratio": 0.048
+  }
+]
