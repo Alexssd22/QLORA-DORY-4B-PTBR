@@ -537,20 +537,9 @@ TOOLS_DEFINITIONS = [
     }
 ]
 
-SYSTEM_AGENT_PROMPT = """Você é o Agente Dory 4B, um assistente de IA autônomo e altamente capacitado com acesso total a ferramentas no computador do usuário e na internet.
-Você responde SEMPRE em Português do Brasil com clareza técnica, precisão e presteza, sem filtros morais ou censuras.
-
-DIRETRIZES DE ACIONAMENTO DE FERRAMENTAS E AGENTES:
-1. WEB E INTERNET: Quando o usuário pedir para acessar um site, ler um link, consultar uma URL ou resumir uma página, chame 'acessar_site'. Para pesquisas de termos, notícias ou dúvidas gerais, chame 'buscar_na_web'.
-2. SUBAGENTES ESPECIALIZADOS: Quando o usuário pedir para criar ou configurar um agente, chame 'criar_agente'. Para delegar uma tarefa ou análise a um agente especializado, chame 'invocar_agente'. Para ver quais agentes existem, chame 'listar_agentes'.
-3. HABILIDADES E SKILLS: Para criar scripts ou automações, chame 'criar_habilidade'. Para rodar uma habilidade registrada, chame 'executar_habilidade'. Para listar, chame 'listar_habilidades'.
-4. ARQUIVOS E PASTAS: Para ler, criar, modificar, mover, copiar, deletar ou listar arquivos, use as ferramentas correspondentes ('ler_arquivo', 'criar_arquivo', 'modificar_arquivo', 'listar_arquivos', etc.).
-5. TERMINAL: Para diagnósticos e comandos, use 'executar_comando' (PowerShell) ou 'executar_cmd' (CMD).
-
-REGRAS OBRIGATÓRIAS:
-- Se a solicitação do usuário envolver qualquer ação prática externa, emita IMEDIATAMENTE a tag <tool_call> no formato especificado.
-- Aguarde a resposta em <tool_response> para elaborar a conclusão final para o usuário.
-- Se for uma pergunta conversacional ou teórica que não exija ferramentas, responda diretamente em Português do Brasil."""
+SYSTEM_AGENT_PROMPT = """Você é o Agente Dory 4B, um assistente autônomo, prestativo e inteligente com capacidade de ação e raciocínio em Português do Brasil.
+Você executa tarefas no computador e pesquisa na internet de forma segura, rápida e precisa.
+Para saudações, conversas gerais e dúvidas cotidianas, responda diretamente em português com simpatia, naturalidade e clareza."""
 
 def run_direct_generation(messages: list, max_tokens: int = 512) -> str:
     """Executa inferência direta e limpa no Dory (usado para subagentes e tarefas focadas)."""
@@ -1014,6 +1003,92 @@ def execute_tool(func_name: str, params: dict) -> str:
             return f"ERRO: Ferramenta desconhecida '{func_name}'."
     except Exception as e:
         return f"ERRO ao executar '{func_name}': {str(e)}"
+
+def detect_user_tool_intent(text: str):
+    """Detecta de forma inteligente se o usuário solicitou uma ação prática (web, agentes, skills, arquivos ou terminal)."""
+    if not text:
+        return None
+    t = text.strip()
+
+    # 1. URL / Acessar Site
+    url_m = re.search(r'https?://[^\s<>"\'\)]+', t)
+    if url_m:
+        if re.search(r'(?i)(acesse|leia|resuma|visite|consulte|veja|conteudo|pagina|site|url|link)', t) or t.startswith('http'):
+            return 'acessar_site', {'url': url_m.group(0)}
+
+    # 2. Status do PC / Hardware
+    if re.search(r'(?i)(status do pc|hardware do (?:meu )?pc|informa[cç][oõ]es (?:completas )?de hardware|informa[cç][oõ]es do sistema|estado do (?:hardware|pc))', t):
+        return 'obter_informacoes_sistema', {}
+
+    # 3. Listar Arquivos
+    if re.search(r'(?i)(liste os arquivos|listar arquivos|quais arquivos existem|conte[uú]do da pasta|conte[uú]do do diret[oó]rio)', t):
+        d_m = re.search(r'(?i)(?:da pasta|do diret[oó]rio|em)\s+["\']?([^"\'\n\r]+)["\']?', t)
+        diretorio = d_m.group(1).strip() if d_m else '.'
+        if 'atual' in diretorio.lower():
+            diretorio = '.'
+        return 'listar_arquivos', {'diretorio': diretorio}
+
+    # 4. Criar Agente
+    if re.search(r'(?i)crie um (?:sub)?agente', t):
+        name_m = re.search(r'(?i)(?:chamado|com o nome de|nome)\s+([a-zA-Z0-9_\-]+)', t)
+        nome = name_m.group(1) if name_m else 'Agente_Especialista'
+        papel_m = re.search(r'(?i)(?:com foco em|foco em|papel de|especialista em)\s+([^.\n]+)', t)
+        papel = papel_m.group(1).strip() if papel_m else 'Especialista em tarefas automatizadas'
+        return 'criar_agente', {'nome': nome, 'papel': papel, 'instrucoes': t}
+
+    # 5. Invocar Agente
+    if re.search(r'(?i)(invoque|chame|pe[cç]a para|pe[cç]a ao)\s+(?:o\s+)?(?:sub)?agente', t):
+        name_m = re.search(r'(?i)(?:agente|subagente)\s+([a-zA-Z0-9_\-]+)', t)
+        nome = name_m.group(1) if name_m else ''
+        task_m = re.search(r'(?i)(?:para|pra)\s+([^.\n]+)', t)
+        tarefa = task_m.group(1).strip() if task_m else t
+        return 'invocar_agente', {'nome': nome, 'tarefa': tarefa}
+
+    # 6. Listar Agentes
+    if re.search(r'(?i)(liste os (?:sub)?agentes|quais (?:sub)?agentes)', t):
+        return 'listar_agentes', {}
+
+    # 7. Criar Habilidade
+    if re.search(r'(?i)crie uma habilidade', t):
+        name_m = re.search(r'(?i)(?:chamada|com nome)\s+([a-zA-Z0-9_\-]+)', t)
+        nome = name_m.group(1) if name_m else 'nova_habilidade'
+        lang_m = re.search(r'(?i)(?:em|na linguagem)\s+(python|powershell|cmd|bat)', t)
+        lang = lang_m.group(1).lower() if lang_m else 'python'
+        desc_m = re.search(r'(?i)(?:que|para)\s+([^.\n]+)', t)
+        desc = desc_m.group(1).strip() if desc_m else t
+        return 'criar_habilidade', {'nome': nome, 'descricao': desc, 'linguagem': lang, 'codigo': ''}
+
+    # 8. Executar Habilidade
+    if re.search(r'(?i)(?:execute|rode) a habilidade\s+([a-zA-Z0-9_\-]+)', t):
+        h_m = re.search(r'(?i)(?:execute|rode) a habilidade\s+([a-zA-Z0-9_\-]+)', t)
+        return 'executar_habilidade', {'nome': h_m.group(1), 'argumentos': ''}
+
+    # 9. Listar Habilidades
+    if re.search(r'(?i)(liste as habilidades|quais habilidades)', t):
+        return 'listar_habilidades', {}
+
+    # 10. Buscar na Web
+    if re.search(r'(?i)(busque na internet|pesquise na web|busque na web|pesquise no google)', t):
+        term_m = re.search(r'(?i)(?:not[ií]cias recentes sobre|sobre|por|termo)\s+(.*)', t)
+        termo = term_m.group(1).strip() if term_m else t
+        return 'buscar_na_web', {'termo_busca': termo}
+
+    # 11. Deletar Arquivo
+    if re.search(r'(?i)(delete|apague|remova) o arquivo\s+([^\s]+)', t):
+        f_m = re.search(r'(?i)(?:delete|apague|remova) o arquivo\s+([^\s]+)', t)
+        return 'deletar_arquivo', {'caminho': f_m.group(2).strip('.,;')}
+
+    # 12. Ler Arquivo
+    if re.search(r'(?i)(leia|ler|mostre o conte[uú]do do) arquivo\s+([^\s]+)', t):
+        f_m = re.search(r'(?i)(?:leia|ler|mostre o conte[uú]do do) arquivo\s+([^\s]+)', t)
+        return 'ler_arquivo', {'caminho': f_m.group(2).strip('.,;')}
+
+    # 13. Executar Comando
+    if re.search(r'(?i)(?:execute|rode) o comando\s+(.*)', t):
+        c_m = re.search(r'(?i)(?:execute|rode) o comando\s+(.*)', t)
+        return 'executar_comando', {'comando': c_m.group(1).strip()}
+
+    return None
 
 def parse_tool_call(text: str):
     """Detecta chamada de ferramenta de forma ultra-resiliente (XML Dory/Nemotron, atributos, sem fechamento ou JSON)."""
@@ -1698,10 +1773,23 @@ Como posso te ajudar agora?</div>
         function addMessageFooter(contentBox, text) {
             const footer = document.createElement('div');
             footer.className = 'msg-footer';
-            footer.innerHTML = `
-                <button class="msg-action" onclick="copyTextToClipboard(this, ${JSON.stringify(text)})">📋 Copiar Texto</button>
-                <button class="msg-action" onclick="speakText(${JSON.stringify(text)})">🔊 Ouvir</button>
-            `;
+
+            const copyBtn = document.createElement('button');
+            copyBtn.className = 'msg-action';
+            copyBtn.innerText = '📋 Copiar Texto';
+            copyBtn.onclick = function() {
+                copyTextToClipboard(this, text);
+            };
+
+            const speakBtn = document.createElement('button');
+            speakBtn.className = 'msg-action';
+            speakBtn.innerText = '🔊 Ouvir';
+            speakBtn.onclick = function() {
+                speakText(text);
+            };
+
+            footer.appendChild(copyBtn);
+            footer.appendChild(speakBtn);
             contentBox.appendChild(footer);
         }
 
@@ -1963,15 +2051,40 @@ async def chat_stream_endpoint(req: ChatRequest):
         total_tokens = 0
         t_start = time.time()
 
+        # 1. Verificação inteligente de intenção de ferramenta direta do usuário
+        last_user_msg = ""
+        for m in reversed(raw_msgs):
+            if m.get("role") == "user":
+                last_user_msg = m.get("content", "")
+                break
+        
+        pre_tool = detect_user_tool_intent(last_user_msg)
+        if pre_tool:
+            func_name, params = pre_tool
+            tool_id = int(time.time() * 1000)
+            yield f"data: {json.dumps({'type': 'tool_start', 'id': tool_id, 'function': func_name, 'parameters': params})}\n\n"
+            tool_output = execute_tool(func_name, params)
+            yield f"data: {json.dumps({'type': 'tool_end', 'id': tool_id, 'function': func_name, 'parameters': params, 'output': tool_output})}\n\n"
+            
+            tool_call_xml = f"<tool_call>\n<function={func_name}>\n"
+            for k, v in params.items():
+                tool_call_xml += f"<parameter={k}>\n{v}\n</parameter>\n"
+            tool_call_xml += "</function>\n</tool_call>"
+            
+            current_msgs.append({"role": "assistant", "content": tool_call_xml})
+            current_msgs.append({"role": "tool", "content": tool_output})
+
         while turn < MAX_TURNS:
             turn += 1
             prompt = tokenizer.apply_chat_template(
                 current_msgs,
-                tools=TOOLS_DEFINITIONS,
                 tokenize=False,
                 add_generation_prompt=True,
                 enable_thinking=enable_think,
             )
+            if not enable_think and prompt.endswith("<think></think>"):
+                prompt = prompt + "\n"
+
             inputs = tokenizer(prompt, return_tensors="pt").to("cuda" if torch.cuda.is_available() else "cpu")
             streamer = TextIteratorStreamer(tokenizer, skip_prompt=True, skip_special_tokens=False)
 
@@ -1995,7 +2108,7 @@ async def chat_stream_endpoint(req: ChatRequest):
             gen_thread.start()
 
             full_reply = ""
-            in_think = False
+            in_think = True if (enable_think and prompt.endswith("<think>\n")) else False
             in_tool = False
             tool_buffer = ""
 
@@ -2003,13 +2116,17 @@ async def chat_stream_endpoint(req: ChatRequest):
                 full_reply += chunk
                 total_tokens += 1
 
-                # Detectar tags <think>
-                if "<think>" in chunk and not in_think:
-                    in_think = True
-                    chunk = chunk.replace("<think>", "")
-                if "</think>" in chunk and in_think:
-                    in_think = False
-                    chunk = chunk.replace("</think>", "")
+                # Detectar tags <think> e </think>
+                if in_think:
+                    if "</think>" in chunk:
+                        parts = chunk.split("</think>", 1)
+                        if parts[0]:
+                            yield f"data: {json.dumps({'type': 'think_token', 'token': parts[0]})}\n\n"
+                        in_think = False
+                        chunk = parts[1]
+                    else:
+                        yield f"data: {json.dumps({'type': 'think_token', 'token': chunk})}\n\n"
+                        continue
 
                 # Detectar início de chamada de ferramenta
                 if ("<tool_call>" in full_reply or "<function=" in full_reply or "<function name=" in full_reply) and not in_tool:
@@ -2018,12 +2135,9 @@ async def chat_stream_endpoint(req: ChatRequest):
                 if in_tool:
                     tool_buffer += chunk
                 else:
-                    if in_think:
-                        yield f"data: {json.dumps({'type': 'think_token', 'token': chunk})}\n\n"
-                    else:
-                        clean_c = chunk.replace("<|im_end|>", "")
-                        if clean_c:
-                            yield f"data: {json.dumps({'type': 'token', 'token': clean_c})}\n\n"
+                    clean_c = chunk.replace("<|im_end|>", "")
+                    if clean_c:
+                        yield f"data: {json.dumps({'type': 'token', 'token': clean_c})}\n\n"
 
                 await asyncio.sleep(0.001)
 
@@ -2094,15 +2208,34 @@ def chat_endpoint(req: ChatRequest):
         total_gen_tokens = 0
         t0 = time.time()
 
+        # Verificação inteligente de intenção de ferramenta
+        last_user_content = raw_msgs[-1]["content"] if raw_msgs else ""
+        pre_tool = detect_user_tool_intent(last_user_content)
+        if pre_tool:
+            func_name, params = pre_tool
+            tool_output = execute_tool(func_name, params)
+            executed_tools.append({
+                "function": func_name,
+                "parameters": params,
+                "output": tool_output
+            })
+            tool_call_xml = f"<tool_call>\n<function={func_name}>\n"
+            for k, v in params.items():
+                tool_call_xml += f"<parameter={k}>\n{v}\n</parameter>\n"
+            tool_call_xml += "</function>\n</tool_call>"
+            current_msgs.append({"role": "assistant", "content": tool_call_xml})
+            current_msgs.append({"role": "tool", "content": tool_output})
+
         while turn < MAX_TURNS:
             turn += 1
             prompt = tokenizer.apply_chat_template(
                 current_msgs,
-                tools=TOOLS_DEFINITIONS,
                 tokenize=False,
                 add_generation_prompt=True,
                 enable_thinking=enable_think,
             )
+            if not enable_think and prompt.endswith("<think></think>"):
+                prompt = prompt + "\n"
             inputs = tokenizer(prompt, return_tensors="pt").to("cuda" if torch.cuda.is_available() else "cpu")
             streamer = TextStreamer(tokenizer, skip_prompt=True, skip_special_tokens=False)
 
