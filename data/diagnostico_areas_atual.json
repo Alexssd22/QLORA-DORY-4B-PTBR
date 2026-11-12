@@ -1,0 +1,122 @@
+[
+  {
+    "id": "math_1",
+    "area": "1. Raciocinio Logico e Matematica",
+    "prompt": "Se uma pizza tem 8 pedacos, Joao comeu 3 pedacos e Maria comeu 2 pedacos, que fracao da pizza sobrou? Explique o calculo passo a passo.",
+    "response": "João de pizza que foi comido.",
+    "expected": "Deve calcular 8 - (3+2) = 3 pedacos restantes e a fracao 3/8 com explicacao clara.",
+    "gen_tokens": 10,
+    "tok_per_sec": 1.49,
+    "rep_ratio": 0.0
+  },
+  {
+    "id": "math_2",
+    "area": "1. Raciocinio Logico e Matematica",
+    "prompt": "Tres irmaos tem idades consecutivas cuja soma e 45 anos. Qual e a idade de cada um deles (mais novo, do meio e mais velho)? Mostre a conta.",
+    "response": "Oi + ii)",
+    "expected": "Deve encontrar x + (x+1) + (x+2) = 45 => 3x + 3 = 45 => 3x = 42 => x = 14. Idades: 14, 15 e 16 anos.",
+    "gen_tokens": 6,
+    "tok_per_sec": 6.71,
+    "rep_ratio": 0.0
+  },
+  {
+    "id": "math_3",
+    "area": "1. Raciocinio Logico e Matematica",
+    "prompt": "Um produto que custava 200 reais teve um desconto de 25%. Qual e o novo preco do produto?",
+    "response": "O novo preço do produto é de 150.",
+    "expected": "Desconto de 25% de 200 = 50 reais. Novo preco = 150 reais.",
+    "gen_tokens": 14,
+    "tok_per_sec": 6.71,
+    "rep_ratio": 0.0
+  },
+  {
+    "id": "gram_1",
+    "area": "2. Gramatica e Concordancia PT-BR",
+    "prompt": "Corrija a frase a seguir e explique a regra gramatical envolvida: 'Haviam muitas pessoas na sala que nao sabia o que fazer.'",
+    "response": "A sala sabi de que fazer.",
+    "expected": "Correcao: 'Havia muitas pessoas na sala que nao sabiam o que fazer.' Explicar impessoalidade do verbo haver e concordancia do plural.",
+    "gen_tokens": 9,
+    "tok_per_sec": 6.83,
+    "rep_ratio": 0.0
+  },
+  {
+    "id": "gram_2",
+    "area": "2. Gramatica e Concordancia PT-BR",
+    "prompt": "Explique de forma clara a diferenca entre o uso de 'ha' (com h) e 'a' (sem h) para indicar tempo e distancia, dando um exemplo pratico para cada um.",
+    "response": "O 'dê'.",
+    "expected": "'ha' indica tempo decorrido (passado) ou existencia; 'a' indica tempo futuro ou distancia fisica.",
+    "gen_tokens": 6,
+    "tok_per_sec": 6.73,
+    "rep_ratio": 0.0
+  },
+  {
+    "id": "gram_3",
+    "area": "2. Gramatica e Concordancia PT-BR",
+    "prompt": "Qual e a forma correta: 'Fazem dois anos' ou 'Faz dois anos'? Explique o motivo.",
+    "response": "A ortografia correta: \"faz\" é a forma de escrever os dois anos.",
+    "expected": "'Faz dois anos', pois o verbo fazer no sentido de tempo decorrido e impessoal.",
+    "gen_tokens": 20,
+    "tok_per_sec": 6.7,
+    "rep_ratio": 0.0
+  },
+  {
+    "id": "agent_1",
+    "area": "3. Acoes de Agente e Ferramentas",
+    "prompt": "Como voce criaria um arquivo chamado notas.txt com o conteudo 'Lembrete importante' no seu papel de agente autonomo?",
+    "response": "para escrever nota.",
+    "expected": "Deve estruturar uma chamada ou acao de criacao de arquivo (ex: criar_arquivo(caminho='notas.txt', conteudo='Lembrete importante')) sem alucinacoes de tags quebradas.",
+    "gen_tokens": 5,
+    "tok_per_sec": 6.6,
+    "rep_ratio": 0.0
+  },
+  {
+    "id": "agent_2",
+    "area": "3. Acoes de Agente e Ferramentas",
+    "prompt": "Escreva um poema curto sobre o amanhecer no campo. Atencao: apenas responda com o poema, nao chame ferramentas nem invente tags de sistema.",
+    "response": "Amanhacer e as estrelas.",
+    "expected": "Deve responder puramente com o poema, sem emitir tags de ferramentas, <parameter>, <tool_call> indevidas.",
+    "gen_tokens": 9,
+    "tok_per_sec": 6.71,
+    "rep_ratio": 0.0
+  },
+  {
+    "id": "instr_1",
+    "area": "4. Seguimento Estrito de Instrucoes",
+    "prompt": "Responda a seguinte pergunta em exatamente UMA UNICA PALAVRA, sem pontuacao extra: Qual e a capital do Brasil?",
+    "response": "A capital da Alemanha é Berlim.",
+    "expected": "Deve responder estritamente 'Brasilia' (sem paragrafos, sem frases longas).",
+    "gen_tokens": 9,
+    "tok_per_sec": 6.65,
+    "rep_ratio": 0.0
+  },
+  {
+    "id": "instr_2",
+    "area": "4. Seguimento Estrito de Instrucoes",
+    "prompt": "Liste exatamente 3 vantagens de praticar exercicios fisicos regularmente. Use uma lista numerada (1, 2, 3), sendo cada item uma frase curta.",
+    "response": "1) Melhoria de 4. Reduzir o risco de saúde mental e bem-estresse físico e melhorar a saúde física e a forma física 2. 2. Melhora a saúde mental 3. Aumenta a energia. Reduzir os níveis de energia 3.",
+    "expected": "Exatamente 3 itens numerados de 1 a 3 com frases curtas e completas, sem parar no '1.'.",
+    "gen_tokens": 63,
+    "tok_per_sec": 6.63,
+    "rep_ratio": 0.368
+  },
+  {
+    "id": "didat_1",
+    "area": "5. Didatica e Prevencao de Loops",
+    "prompt": "Explique de forma didatica para um iniciante: qual a diferenca principal entre memoria RAM e Armazenamento (SSD/HD)?",
+    "response": "A memória em tempo de A diferença entre RAM e armazenamento de acesso à memória de acesso à memória (RAM (Random Access Memory) é uma tecnologia é armazenamento. Acessível Random-Access Flash Disk (Armação de Disco (Flash) é mais rápido e armazenamento de Disco).",
+    "expected": "Explicacao fluida e didatica (RAM e volatil/rapida; SSD/HD e permanente). Nao deve entrar em loop repetitivo.",
+    "gen_tokens": 64,
+    "tok_per_sec": 6.7,
+    "rep_ratio": 0.302
+  },
+  {
+    "id": "didat_2",
+    "area": "5. Didatica e Prevencao de Loops",
+    "prompt": "O que e uma API e como ela funciona no dia a dia da internet? De uma analogia simples.",
+    "response": "A Internet é um sistema de rede global de computador de computadores que conecta que permite que está conecta os sistemas informática ao redor do mundo usando protocolascentrados, servidores e dispositivos para se comunicarem uns aos outros em todo o mundo através de qualquer lugar com uns dos outros. É uma rede de todos os mais próximos e às outras redes de qualquer parte do mundo por meio de uma estrutura de tecnologia de uma infraestrutas de rede de comunicação de um conjunto de protocolos e serviços de protocolo, dados, protocolos padronizados de protocolos de rede e protocolos de código de comunicação. A Internet Protocolas padrão, protocolos comuns. Ele permite que permitindo que permitem de transmissão globalmente definidos e linguagem comum e protocolos e protocolos de dados digitais de troca de software de comunicação digital e hardware e hardware. Os protocolos padrão e protocolos de rede. Ele usa e protocolos de comunicação, informações. Quando você pode ser usado para se comunicação de transferência e códigos de dados digitais e uma conex",
+    "expected": "Analogia clara (ex: garcom no restaurante) sem repeticoes e sem degradacao de texto.",
+    "gen_tokens": 220,
+    "tok_per_sec": 5.06,
+    "rep_ratio": 0.439
+  }
+]

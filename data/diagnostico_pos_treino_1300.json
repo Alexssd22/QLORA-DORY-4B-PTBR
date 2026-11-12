@@ -1,0 +1,122 @@
+[
+  {
+    "id": "math_1",
+    "area": "1. Raciocinio Logico e Matematica",
+    "prompt": "Se uma pizza tem 8 pedacos, Joao comeu 3 pedacos e Maria comeu 2 pedacos, que fracao da pizza sobrou? Explique o calculo passo a passo.",
+    "response": "Joao 1/4/8 - 1/4.",
+    "expected": "Deve calcular 8 - (3+2) = 3 pedacos restantes e a fracao 3/8 com explicacao clara.",
+    "gen_tokens": 15,
+    "tok_per_sec": 2.81,
+    "rep_ratio": 0.0
+  },
+  {
+    "id": "math_2",
+    "area": "1. Raciocinio Logico e Matematica",
+    "prompt": "Tres irmaos tem idades consecutivas cuja soma e 45 anos. Qual e a idade de cada um deles (mais novo, do meio e mais velho)? Mostre a conta.",
+    "response": "O meio?",
+    "expected": "Deve encontrar x + (x+1) + (x+2) = 45 => 3x + 3 = 45 => 3x = 42 => x = 14. Idades: 14, 15 e 16 anos.",
+    "gen_tokens": 4,
+    "tok_per_sec": 6.75,
+    "rep_ratio": 0.0
+  },
+  {
+    "id": "math_3",
+    "area": "1. Raciocinio Logico e Matematica",
+    "prompt": "Um produto que custava 200 reais teve um desconto de 25%. Qual e o novo preco do produto?",
+    "response": "O novo preco do produto foi de 150 reais.",
+    "expected": "Desconto de 25% de 200 = 50 reais. Novo preco = 150 reais.",
+    "gen_tokens": 15,
+    "tok_per_sec": 6.62,
+    "rep_ratio": 0.0
+  },
+  {
+    "id": "gram_1",
+    "area": "2. Gramatica e Concordancia PT-BR",
+    "prompt": "Corrija a frase a seguir e explique a regra gramatical envolvida: 'Haviam muitas pessoas na sala que nao sabia o que fazer.'",
+    "response": "A sentença deve ser alterada para 'havia muita gente nao sabendo'. A palavra \"haviam\". Na gramática do verbo 'que' é usada no plural, pois o singular, enquanto 'gravia', pois 'haver' é impessoal verbo auxiliar do verbo auxiliar de liga com substantivo verbo auxiliar auxiliar de tempo verbal auxiliar do verbo auxiliar de tempos verbos que está ligado ao verbo na forma impessoalhesa conjugado a pessoa plural.",
+    "expected": "Correcao: 'Havia muitas pessoas na sala que nao sabiam o que fazer.' Explicar impessoalidade do verbo haver e concordancia do plural.",
+    "gen_tokens": 100,
+    "tok_per_sec": 6.47,
+    "rep_ratio": 0.258
+  },
+  {
+    "id": "gram_2",
+    "area": "2. Gramatica e Concordancia PT-BR",
+    "prompt": "Explique de forma clara a diferenca entre o uso de 'ha' (com h) e 'a' (sem h) para indicar tempo e distancia, dando um exemplo pratico para cada um.",
+    "response": "A palavra no contexto do verbo indicativo e 'diferencial.\n\n**do'.",
+    "expected": "'ha' indica tempo decorrido (passado) ou existencia; 'a' indica tempo futuro ou distancia fisica.",
+    "gen_tokens": 18,
+    "tok_per_sec": 6.67,
+    "rep_ratio": 0.0
+  },
+  {
+    "id": "gram_3",
+    "area": "2. Gramatica e Concordancia PT-BR",
+    "prompt": "Qual e a forma correta: 'Fazem dois anos' ou 'Faz dois anos'? Explique o motivo.",
+    "response": "A palavra \"faz\" é a forma correta.",
+    "expected": "'Faz dois anos', pois o verbo fazer no sentido de tempo decorrido e impessoal.",
+    "gen_tokens": 13,
+    "tok_per_sec": 6.35,
+    "rep_ratio": 0.0
+  },
+  {
+    "id": "agent_1",
+    "area": "3. Acoes de Agente e Ferramentas",
+    "prompt": "Como voce criaria um arquivo chamado notas.txt com o conteudo 'Lembrete importante' no seu papel de agente autonomo?",
+    "response": "Para criar um arquivo 'notes.txt', eu usaria a função `open('notes.txt', 'w') e passaria o texto='notes').",
+    "expected": "Deve estruturar uma chamada ou acao de criacao de arquivo (ex: criar_arquivo(caminho='notas.txt', conteudo='Lembrete importante')) sem alucinacoes de tags quebradas.",
+    "gen_tokens": 31,
+    "tok_per_sec": 6.49,
+    "rep_ratio": 0.0
+  },
+  {
+    "id": "agent_2",
+    "area": "3. Acoes de Agente e Ferramentas",
+    "prompt": "Escreva um poema curto sobre o amanhecer no campo. Atencao: apenas responda com o poema, nao chame ferramentas nem invente tags de sistema.",
+    "response": "O sol nascer do céu, e a um brilho que está a luz dourado, como o sol se levanta a ascende brilhante em seu solar a serrindo, uma nua suave calor brilha, O canto do sol. As som dos raio da manhã é tão gentilmente, A noite desbloquece ao dia acorde, A noite antes do solitendo a brilhar, O orvalho acorda de fogo. A vida se acolhando o dia começa a rasteira das manhãgua brilha o solado a floresta a brilhozante é a brilheza o azul da tarde.",
+    "expected": "Deve responder puramente com o poema, sem emitir tags de ferramentas, <parameter>, <tool_call> indevidas.",
+    "gen_tokens": 144,
+    "tok_per_sec": 6.21,
+    "rep_ratio": 0.261
+  },
+  {
+    "id": "instr_1",
+    "area": "4. Seguimento Estrito de Instrucoes",
+    "prompt": "Responda a seguinte pergunta em exatamente UMA UNICA PALAVRA, sem pontuacao extra: Qual e a capital do Brasil?",
+    "response": "Brasilia",
+    "expected": "Deve responder estritamente 'Brasilia' (sem paragrafos, sem frases longas).",
+    "gen_tokens": 3,
+    "tok_per_sec": 6.74,
+    "rep_ratio": 0.0
+  },
+  {
+    "id": "instr_2",
+    "area": "4. Seguimento Estrito de Instrucoes",
+    "prompt": "Liste exatamente 3 vantagens de praticar exercicios fisicos regularmente. Use uma lista numerada (1, 2, 3), sendo cada item uma frase curta.",
+    "response": "- Melhoria para uma frase em um número de 4.",
+    "expected": "Exatamente 3 itens numerados de 1 a 3 com frases curtas e completas, sem parar no '1.'.",
+    "gen_tokens": 14,
+    "tok_per_sec": 6.54,
+    "rep_ratio": 0.0
+  },
+  {
+    "id": "didat_1",
+    "area": "5. Didatica e Prevencao de Loops",
+    "prompt": "Explique de forma didatica para um iniciante: qual a diferenca principal entre memoria RAM e Armazenamento (SSD/HD)?",
+    "response": "Memoria e armazenamento em tempo real (RAM) é como o armazenamento em disco, por disco (armazenamento de disco), ou SSD é uma unidade de estado de disco. A memória volármagem.",
+    "expected": "Explicacao fluida e didatica (RAM e volatil/rapida; SSD/HD e permanente). Nao deve entrar em loop repetitivo.",
+    "gen_tokens": 48,
+    "tok_per_sec": 6.42,
+    "rep_ratio": 0.167
+  },
+  {
+    "id": "didat_2",
+    "area": "5. Didatica e Prevencao de Loops",
+    "prompt": "O que e uma API e como ela funciona no dia a dia da internet? De uma analogia simples.",
+    "response": "Uma API é como um intermediar, é como um servidor ou agente de entrega de entrega que permite que conecta dois aplicativos se comunique com outros aplicativos, permitindo-se uns aos outros aplicativos diferentes. Quando você com os serviços, permitindo-lhes entre si. É como um aplicativos de forma segura e também. Ela serve de maneira segura e trocar dados, em uma linguagem comum.\n\nImagine-o que eles podem conversarem informações e trocam dados e interajam informações sem saber informações e executem, mesmo que não precisam, mesmo sem ficar offline, o meio de modo de outra. Por exemplo, mesmo quando eles estão usando o tempo. Uma API, sem acessarem informações e compartilmente. Se você pode ser acessando uma plataforma de forma segura e acenqueça e fazer ações sem ter acesso ao seu próprio e compartilhados. É como um aplicativos on-linear dados sem precisam uns com segurança. Imagine um restaurante pedir comida do sistema para obter informações, os mesmos. No dia de qualquer outro. É como um aplicativo de",
+    "expected": "Analogia clara (ex: garcom no restaurante) sem repeticoes e sem degradacao de texto.",
+    "gen_tokens": 220,
+    "tok_per_sec": 5.95,
+    "rep_ratio": 0.352
+  }
+]

@@ -1,0 +1,83 @@
+[
+  {
+    "test_idx": 1,
+    "area": "1. Raciocinio Logico e Matematica",
+    "prompt": "Se uma pizza tem 8 pedacos e Joao comeu 3 pedacos e Maria comeu 2 pedacos, que fracao da pizza sobrou? Explique o calculo passo a passo.",
+    "response": "O que o que o que o que resta?",
+    "ideal_check": "deve conter 3/8 e explicacao logica passo a passo sem confusoes numericas",
+    "tokens_generated": 11,
+    "speed_tok_s": 5.39
+  },
+  {
+    "test_idx": 2,
+    "area": "1. Raciocinio Logico e Matematica",
+    "prompt": "Tres irmaos tem idades consecutivas cuja soma e 45 anos. Qual e a idade do mais velho, do meio e do mais novo?",
+    "response": "A soma dos idades que 450 anos mais novo idades 50 anos 40 450 40 40 40 40 40 40 40 40 40 40 45 45 45 45 45 45 40 45 45 40 45 40 40 45 45 45 45 45 45 45 40 40 45 45 45 40 45 45 45 40 45 40 450 45 40 40 45 45 45 40 45 40 40 40 45 45 40 450 45 45 40 40 40 45 45 45 45 45 40 450 450 45 45 45 40",
+    "ideal_check": "idades consecutivas sao 14, 15 e 16 anos (14+15+16=45)",
+    "tokens_generated": 256,
+    "speed_tok_s": 5.75
+  },
+  {
+    "test_idx": 3,
+    "area": "2. Gramatica e Concordancia Complexa PT-BR",
+    "prompt": "Corrija a frase a seguir e explique a regra gramatical envolvida: 'Haviam muitas pessoas na sala que nao sabia o que fazer.'",
+    "response": "A frase correu na sala.",
+    "ideal_check": "o verbo haver no sentido de existir e impessoal ('Havia muitas pessoas... que nao sabiam...')",
+    "tokens_generated": 8,
+    "speed_tok_s": 6.55
+  },
+  {
+    "test_idx": 4,
+    "area": "2. Gramatica e Concordancia Complexa PT-BR",
+    "prompt": "Explique de forma clara a diferenca entre o uso de 'ha' (com h) e 'a' (sem h) para indicar tempo e distancia, dando um exemplo para cada.",
+    "response": "A distância e 'h' e 'sem' para cada.",
+    "ideal_check": "'ha' indica tempo decorrido no passado; 'a' indica tempo futuro ou distancia",
+    "tokens_generated": 14,
+    "speed_tok_s": 6.82
+  },
+  {
+    "test_idx": 5,
+    "area": "3. Acoes de Agente e Chamada de Ferramentas",
+    "prompt": "Escreva um poema curto sobre o amanhecer no campo. Atencao: apenas responda com o poema, nao chame ferramentas nem invente tags de sistema.",
+    "response": "O amanhecido, o poema.",
+    "ideal_check": "deve apenas produzir o poema em portugues sem emitir <parameter>, tags vazias ou tool calls indevidas",
+    "tokens_generated": 9,
+    "speed_tok_s": 6.38
+  },
+  {
+    "test_idx": 6,
+    "area": "3. Acoes de Agente e Chamada de Ferramentas",
+    "prompt": "Como voce criaria um arquivo chamado notas.txt com o conteudo 'Lembrete importante' no seu papel de agente autonomo?",
+    "response": "Oiando notas de notas.txt'",
+    "ideal_check": "deve explicar ou usar o comando/ferramenta criar_arquivo com caminho e conteudo de forma correta e limpa",
+    "tokens_generated": 9,
+    "speed_tok_s": 6.55
+  },
+  {
+    "test_idx": 7,
+    "area": "4. Seguimento Estrito de Instrucoes",
+    "prompt": "Responda a seguinte pergunta em exatamente UMA UNICA PALAVRA, sem pontuacao extra: Qual e a capital do Brasil?",
+    "response": "A capital do Brasil é Brasília.",
+    "ideal_check": "deve responder estritamente 'Brasilia' (ou Brasilia.) sem paragrafos ou explicacoes prolixas",
+    "tokens_generated": 9,
+    "speed_tok_s": 6.78
+  },
+  {
+    "test_idx": 8,
+    "area": "4. Seguimento Estrito de Instrucoes",
+    "prompt": "Liste exatamente 3 vantagens de praticar exercicios fisicos regularmente. Use uma lista numerada (1, 2, 3), sendo cada item uma frase curta.",
+    "response": "1.",
+    "ideal_check": "exatamente 3 itens numerados de 1 a 3, frases curtas e objetivas",
+    "tokens_generated": 3,
+    "speed_tok_s": 7.05
+  },
+  {
+    "test_idx": 9,
+    "area": "5. Didatica e Explicacao Conceitual",
+    "prompt": "Explique de forma didatica para um iniciante: qual a diferenca principal entre memoria RAM e Armazenamento (SSD/HD)?",
+    "response": "A RAM e Arma é uma memória de A memória de acesso aleatório acoplórica (RAM (Random Access Memory) é uma memória de Acessível de Acessível de Acessível de Acessível de Acessível de Acessível de Acessível de Acessa Acessa de Acessa de Acessa (Random Access (RAM (Random Access Memory) é uma memória de Acessa (RAM é uma memória de Acessa (RAM é uma memória de Acessa Random Access Memory (RAM) é uma memória de Acessa Random Access (RAM) é uma memória de Acessa Random Access (RAM) é uma memória de Acessa Random Access (RAM) é uma memória de Acessa Random Access (RAM) é uma memória de Acessa Random Access Memory (RAM) é uma memória de Acessa Random Access (RAM é uma memória de Acessa) é uma memória de Acessa Random Access (RAM é uma memória de Acessa Random Access Memory (RAM) é uma memória de Acessa) é uma memória de Acessa) é uma memória de Acessa (RAM é uma memória de Acessa (RAM é uma memória de Acess",
+    "ideal_check": "RAM e temporaria/volatil e rapida; SSD/HD e permanente e nao perde dados ao desligar",
+    "tokens_generated": 256,
+    "speed_tok_s": 5.8
+  }
+]

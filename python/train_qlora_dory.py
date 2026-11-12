@@ -1,6 +1,7 @@
 import os
 import sys
 import json
+import glob
 
 # Garantir carregamento correto das DLLs CUDA no Windows
 site_torch_lib = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".venv", "Lib", "site-packages", "torch", "lib")
@@ -36,14 +37,15 @@ configuration_utils.PreTrainedConfig.validate_layer_type = lambda self: None
 
 MODEL_ID = "nvidia/NVIDIA-Nemotron-Labs-Dory1.0-4B-BF16"
 OUTPUT_DIR = "models/dory-lora-ptbr"
-TRAIN_DATA = "data/final/train.jsonl"
-EVAL_DATA = "data/final/eval.jsonl"
+TRAIN_DATA = "data/final/train_targeted_100.jsonl"
+EVAL_DATA = "data/final/eval_targeted_100.jsonl"
 
 def main():
-    print("=" * 60)
-    print("Iniciando Treinamento QLoRA do Dory 1.0 4B em PT-BR (Uncensored)")
+    print("=" * 65)
+    print("Iniciando Treinamento QLoRA do Dory 1.0 4B - Retomada Focada")
     print("GPU:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else "Nenhuma")
-    print("=" * 60)
+    print(f"Dataset de Treino: {TRAIN_DATA}")
+    print("=" * 65)
 
     if not torch.cuda.is_available():
         print("ERRO: Nenhuma GPU NVIDIA com suporte a CUDA foi detectada.")
@@ -84,8 +86,7 @@ def main():
     print(f"Modelo carregado na GPU! VRAM alocada: {torch.cuda.memory_allocated() / (1024**3):.2f} GB")
     model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=False)
 
-    # 3. Identificar checkpoint existente mais recente ou criar novos adaptadores
-    import glob
+    # 3. Identificar checkpoint existente mais recente (ex: checkpoint-1225)
     ckpts = glob.glob(os.path.join(OUTPUT_DIR, "checkpoint-*"))
     latest_ckpt = None
     latest_step = 0
@@ -98,8 +99,15 @@ def main():
         except ValueError:
             pass
 
+    TARGET_CUMULATIVE_STEP = 1300
+    if latest_step >= TARGET_CUMULATIVE_STEP:
+        STEPS_TO_RUN = 100
+    else:
+        STEPS_TO_RUN = TARGET_CUMULATIVE_STEP - latest_step
+
     if latest_ckpt:
         print(f"\n[🔄 Carregando Adaptadores Pré-treinados] Checkpoint encontrado: {latest_ckpt} (passo {latest_step})")
+        print(f"Passos restantes para meta acumulada ({TARGET_CUMULATIVE_STEP}): {STEPS_TO_RUN} passos")
         model = PeftModel.from_pretrained(model, latest_ckpt, is_trainable=True)
     else:
         print("\n[4/5] Injetando Adaptadores LoRA de Alta Precisão (Rank 32, Alpha 64)...")
@@ -116,8 +124,8 @@ def main():
 
     model.print_trainable_parameters()
 
-    # 4. Carregar Datasets e Aplicar Mascaramento de Prompt (Loss focado na Resposta)
-    print("\n[5/5] Preparando Datasets Expandidos (com mascaramento -100 no prompt)...")
+    # 4. Carregar Datasets e Aplicar Mascaramento de Prompt (Loss focado na Resposta com suporte a thinking)
+    print("\n[5/5] Preparando Datasets Especializados (Loss Masking -100 alinhado)...")
     dataset = load_dataset("json", data_files={"train": TRAIN_DATA, "eval": EVAL_DATA})
 
     def tokenize_fn(batch):
@@ -125,11 +133,17 @@ def main():
         all_labels = []
         for messages in batch["messages"]:
             user_msgs = [m for m in messages if m["role"] != "assistant"]
+            ast_msgs = [m for m in messages if m["role"] == "assistant"]
+            has_think = any(
+                "<think>" in m.get("content", "") or "<think>" in m.get("reasoning_content", "")
+                for m in ast_msgs
+            )
+
             prompt_text = tokenizer.apply_chat_template(
-                user_msgs, tokenize=False, add_generation_prompt=True
+                user_msgs, tokenize=False, add_generation_prompt=True, enable_thinking=has_think
             )
             full_text = tokenizer.apply_chat_template(
-                messages, tokenize=False, add_generation_prompt=False
+                messages, tokenize=False, add_generation_prompt=False, enable_thinking=has_think
             )
 
             p_ids = tokenizer(prompt_text, truncation=True, max_length=512)["input_ids"]
@@ -151,26 +165,25 @@ def main():
         remove_columns=dataset["train"].column_names,
     )
 
-    # 5. Argumentos de Treino Seguros e Estáveis para Windows + RTX 4070 (+200 passos)
-    STEPS_TO_RUN = 200
+    # 5. Argumentos de Treino Ultrarrobustos e Estáveis para Windows
+    # Usar adamw_bnb_8bit (100% em VRAM GPU sem paginacao) e desativar eval sincrono pesado
     training_args = TrainingArguments(
         output_dir=OUTPUT_DIR,
         per_device_train_batch_size=1,
         gradient_accumulation_steps=16,
-        learning_rate=8e-5,
+        learning_rate=5e-5,
         lr_scheduler_type="cosine",
-        warmup_steps=15,
+        warmup_steps=8,
         weight_decay=0.01,
         max_steps=STEPS_TO_RUN,
-        logging_steps=10,
+        logging_steps=5,
         logging_first_step=True,
-        eval_strategy="steps",
-        eval_steps=50,
+        eval_strategy="no",
         save_strategy="steps",
-        save_steps=50,
-        save_total_limit=3,
+        save_steps=25,
+        save_total_limit=2,
         bf16=True,
-        optim="paged_adamw_8bit",
+        optim="adamw_bnb_8bit",
         report_to="none",
         gradient_checkpointing=False,
         dataloader_pin_memory=False,
@@ -186,20 +199,19 @@ def main():
         model=model,
         args=training_args,
         train_dataset=tokenized_dataset["train"],
-        eval_dataset=tokenized_dataset["eval"],
         data_collator=data_collator,
     )
 
-    print("\n" + "=" * 60)
+    cumulative_target = latest_step + STEPS_TO_RUN
+    print("\n" + "=" * 65)
     print(f"Iniciando refinamento QLoRA (+{STEPS_TO_RUN} passos) na RTX 4070...")
-    print(f"Base de partida: Passo {latest_step} -> Meta acumulada: Passo {latest_step + STEPS_TO_RUN}")
-    print("=" * 60)
+    print(f"Base de partida: Passo {latest_step} -> Meta acumulada: Passo {cumulative_target}")
+    print("=" * 65)
 
     trainer.train()
 
-    # Salvar checkpoint cumulativo correspondente (ex: checkpoint-1200)
-    cumulative_step = latest_step + STEPS_TO_RUN
-    final_checkpoint_dir = os.path.join(OUTPUT_DIR, f"checkpoint-{cumulative_step}")
+    # Salvar checkpoint cumulativo correspondente (checkpoint-1300)
+    final_checkpoint_dir = os.path.join(OUTPUT_DIR, f"checkpoint-{cumulative_target}")
     os.makedirs(final_checkpoint_dir, exist_ok=True)
     model.save_pretrained(final_checkpoint_dir)
     tokenizer.save_pretrained(final_checkpoint_dir)
@@ -208,7 +220,19 @@ def main():
     print(f"Salvando adaptadores LoRA finais em: {OUTPUT_DIR}")
     model.save_pretrained(OUTPUT_DIR)
     tokenizer.save_pretrained(OUTPUT_DIR)
-    print("Adaptadores salvos com sucesso!")
+
+    # Sanitizar README gerado pelo PEFT para evitar vazamento de caminhos locais
+    readme_path = os.path.join(OUTPUT_DIR, "README.md")
+    if os.path.exists(readme_path):
+        with open(readme_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        import re
+        content = re.sub(r'base_model:\s*.*', 'base_model: nvidia/NVIDIA-Nemotron-Labs-Dory1.0-4B-BF16', content)
+        content = re.sub(r'[A-Za-z]:\\[^\n]*', 'nvidia/NVIDIA-Nemotron-Labs-Dory1.0-4B-BF16', content)
+        with open(readme_path, "w", encoding="utf-8") as f:
+            f.write(content)
+
+    print("Adaptadores e metadados salvos e sanitizados com sucesso!")
 
 if __name__ == "__main__":
     main()

@@ -3,7 +3,7 @@ base_model: nvidia/NVIDIA-Nemotron-Labs-Dory1.0-4B-BF16
 library_name: peft
 pipeline_tag: text-generation
 tags:
-- base_model:adapter:nvidia/NVIDIA-Nemotron-Labs-Dory1.0-4B-BF16
+- base_model: nvidia/NVIDIA-Nemotron-Labs-Dory1.0-4B-BF16
 - lora
 - transformers
 ---
