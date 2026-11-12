@@ -127,8 +127,8 @@ QLORA-DORY-4B-PTBR/
 │   ├── agents/                     # Subagentes especializados (Especialista_Rust, etc.)
 │   └── skills/                     # Habilidades e automações (Python, PowerShell, Batch)
 ├── models/
-│   ├── dory-4b-ptbr-merged/        # Modelo unificado em BF16 (~7.4 GB)
-│   └── dory-lora-ptbr/             # Adaptadores LoRA salvos no Passo 1000
+│   ├── dory-4b-ptbr-merged/        # Modelo unificado em BF16 (~7.4 GB) com hiperesfera nGPT
+│   └── dory-lora-ptbr/             # Adaptadores LoRA finais consolidados no Passo 1400
 ├── python/
 │   ├── setup_check.py              # Verificador e assistente de hardware/configuração
 │   ├── serve_dory.py               # Servidor unificado (Web Chat + Agente + Ferramentas + API)
