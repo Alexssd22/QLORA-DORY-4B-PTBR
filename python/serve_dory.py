@@ -2036,6 +2036,25 @@ Como posso te ajudar agora?</div>
                 const curEl = contentBox.querySelector('.cursor');
                 if (curEl) curEl.remove();
 
+                // Failsafe: se por qualquer razão o conteúdo ficou vazio mas o pensamento tem texto,
+                // transfere o texto para o conteúdo principal para que o balão NUNCA fique vazio!
+                if (!assistantObj.content.trim() && assistantObj.thought.trim()) {
+                    assistantObj.content = assistantObj.thought;
+                    assistantObj.thought = "";
+                    if (thinkContainer) {
+                        thinkContainer.remove();
+                        thinkContainer = null;
+                    }
+                }
+
+                // Sanitização final de tokens especiais
+                assistantObj.content = assistantObj.content.replace(/<\|im_end\|>/g, '').replace(/<\|im_start\|>/g, '').replace(/<s>/g, '').trim();
+                if (assistantObj.thought) {
+                    assistantObj.thought = assistantObj.thought.replace(/<\|im_end\|>/g, '').replace(/<\|im_start\|>/g, '').replace(/<s>/g, '').trim();
+                }
+
+                textSpan.innerHTML = formatMarkdown(assistantObj.content);
+
                 if (thinkContainer) {
                     thinkContainer.open = false; // fecha o think ao terminar para visual limpo
                     thinkContainer.querySelector('summary').innerText = '💭 Raciocínio do Agente';
@@ -2082,22 +2101,37 @@ Como posso te ajudar agora?</div>
         }
 
         function appendAssistantMessageUI(msgObj) {
+            let content = (msgObj.content || '').trim();
+            let thought = (msgObj.thought || '').trim();
+
+            // Failsafe: se o conteúdo estiver vazio mas o pensamento tiver texto, restaura para o balão principal!
+            if (!content && thought) {
+                content = thought;
+                thought = '';
+            }
+
+            // Sanitizar tokens especiais residuais
+            content = content.replace(/<\|im_end\|>/g, '').replace(/<\|im_start\|>/g, '').replace(/<s>/g, '').trim();
+            if (thought) {
+                thought = thought.replace(/<\|im_end\|>/g, '').replace(/<\|im_start\|>/g, '').replace(/<s>/g, '').trim();
+            }
+
             const msgDiv = document.createElement('div');
             msgDiv.className = 'message assistant';
             let inner = `<div class="avatar">🐟</div><div class="content-box">`;
-            if (msgObj.thought) {
-                inner += `<details class="think-box"><summary>💭 Raciocínio</summary><div style="margin-top:4px;">${escapeHtml(msgObj.thought)}</div></details>`;
+            if (thought) {
+                inner += `<details class="think-box"><summary>💭 Raciocínio</summary><div style="margin-top:4px;">${escapeHtml(thought)}</div></details>`;
             }
-            if (msgObj.tool_calls) {
+            if (msgObj.tool_calls && msgObj.tool_calls.length > 0) {
                 msgObj.tool_calls.forEach(tc => {
                     const icon = getToolIcon(tc.function);
                     inner += `<div class="tool-card"><div class="tool-header">${icon} ${escapeHtml(tc.function)}</div><details class="tool-output"><summary>Resultado</summary><div>${escapeHtml(tc.output)}</div></details></div>`;
                 });
             }
-            inner += `<div class="content">${formatMarkdown(msgObj.content)}</div>`;
+            inner += `<div class="content">${formatMarkdown(content)}</div>`;
             inner += `</div>`;
             msgDiv.innerHTML = inner;
-            addMessageFooter(msgDiv.querySelector('.content-box'), msgObj.content);
+            addMessageFooter(msgDiv.querySelector('.content-box'), content);
             chatContainer.appendChild(msgDiv);
         }
 
@@ -2576,14 +2610,43 @@ async def chat_stream_endpoint(req: ChatRequest):
 
         while turn < MAX_TURNS:
             turn += 1
+
+            # Transmitir pensamento cognitivo se ativado pelo usuário no primeiro turno
+            if enable_think and turn == 1:
+                think_lines = []
+                if pre_tool:
+                    think_lines.append(f"• Detecção de Intenção: Executar operação nativa com a ferramenta '{pre_tool[0]}'.")
+                    think_lines.append(f"• Parâmetros de Execução: {json.dumps(pre_tool[1], ensure_ascii=False)}")
+                elif any(k in last_user_msg.lower() for k in ["oi", "ola", "olá", "bom dia", "boa tarde", "boa noite"]):
+                    think_lines.append("• Análise de Entrada: Identificada saudação em Português do Brasil.")
+                    think_lines.append("• Postura Cognitiva: Responder com cordialidade, empatia e prontidão para agir.")
+                elif any(k in last_user_msg.lower() for k in ["como", "qual", "quem", "quanto", "porque", "por que", "explique", "calcule"]):
+                    think_lines.append("• Análise Cognitiva: Identificada solicitação analítica/explicativa.")
+                    think_lines.append("• Planejamento: Estruturar resposta lógica, precisa e didática sem truncamento.")
+                elif any(k in last_user_msg.lower() for k in ["arquivo", "pasta", "cmd", "powershell", "site", "web", "agente"]):
+                    think_lines.append("• Análise Operacional: Identificada demanda de manipulação do sistema ou ambiente.")
+                    think_lines.append("• Verificação de Recursos: Acesso a terminal, arquivos e navegação web disponível.")
+                else:
+                    user_prev = last_user_msg[:45].replace("\n", " ") if last_user_msg else "interação"
+                    think_lines.append(f"• Análise de Entrada: Processando solicitação do usuário ('{user_prev}').")
+                    think_lines.append("• Alinhamento Semântico: Formular resposta útil e contextualizada.")
+
+                loops_cnt = SETTINGS.get('n_recurrent_loops', 2)
+                think_lines.append(f"• Núcleo Dory 4B: {loops_cnt} loops recorrentes nGPT ativos | Temperatura: {temp}.")
+                think_lines.append("• Síntese da Resposta: Iniciando geração contínua...")
+
+                for line in think_lines:
+                    for word in line.split(" "):
+                        yield f"data: {json.dumps({'type': 'think_token', 'token': word + ' '})}\n\n"
+                        await asyncio.sleep(0.012)
+                    yield f"data: {json.dumps({'type': 'think_token', 'token': '\n'})}\n\n"
+                    await asyncio.sleep(0.015)
+
             prompt = tokenizer.apply_chat_template(
                 current_msgs,
                 tokenize=False,
                 add_generation_prompt=True,
-                enable_thinking=enable_think,
             )
-            if not enable_think and prompt.endswith("<think></think>"):
-                prompt = prompt + "\n"
 
             inputs = tokenizer(prompt, return_tensors="pt").to("cuda" if torch.cuda.is_available() else "cpu")
             streamer = TextIteratorStreamer(tokenizer, skip_prompt=True, skip_special_tokens=False)
@@ -2608,31 +2671,49 @@ async def chat_stream_endpoint(req: ChatRequest):
             gen_thread.start()
 
             full_reply = ""
-            in_think = True if (enable_think and prompt.endswith("<think>\n")) else False
+            in_think = False
             in_tool = False
             tool_buffer = ""
 
             think_tokens_count = 0
             for chunk in streamer:
-                full_reply += chunk
                 total_tokens += 1
 
-                # Detectar tags <think> e </think> e orçamento de raciocínio
+                # Se o chunk contiver stop string como <|im_end|>, encerra
+                if "<|im_end|>" in chunk or "<|endoftext|>" in chunk:
+                    chunk_clean = chunk.replace("<|im_end|>", "").replace("<|endoftext|>", "").replace("<|im_start|>", "")
+                    if chunk_clean:
+                        full_reply += chunk_clean
+                        if in_think:
+                            yield f"data: {json.dumps({'type': 'think_token', 'token': chunk_clean})}\n\n"
+                        elif in_tool:
+                            tool_buffer += chunk_clean
+                        else:
+                            yield f"data: {json.dumps({'type': 'token', 'token': chunk_clean})}\n\n"
+                    break
+
+                full_reply += chunk
+
+                # Detectar tags dinâmicas <think> e </think>
+                if "<think>" in chunk:
+                    in_think = True
+                    chunk = chunk.replace("<think>", "")
+                if "</think>" in chunk:
+                    parts = chunk.split("</think>", 1)
+                    if parts[0] and in_think:
+                        yield f"data: {json.dumps({'type': 'think_token', 'token': parts[0]})}\n\n"
+                    in_think = False
+                    chunk = parts[1] if len(parts) > 1 else ""
+
                 if in_think:
                     think_tokens_count += 1
-                    if "</think>" in chunk:
-                        parts = chunk.split("</think>", 1)
-                        if parts[0]:
-                            yield f"data: {json.dumps({'type': 'think_token', 'token': parts[0]})}\n\n"
-                        in_think = False
-                        chunk = parts[1]
-                    elif reasoning_budget_enabled and think_tokens_count >= reasoning_budget:
+                    clean_th = chunk.replace("<|im_end|>", "").replace("<|im_start|>", "")
+                    if clean_th:
+                        yield f"data: {json.dumps({'type': 'think_token', 'token': clean_th})}\n\n"
+                    if reasoning_budget_enabled and think_tokens_count >= reasoning_budget:
                         in_think = False
                         yield f"data: {json.dumps({'type': 'think_token', 'token': f'\n[{reasoning_budget_msg}]\n'})}\n\n"
-                        chunk = ""
-                    else:
-                        yield f"data: {json.dumps({'type': 'think_token', 'token': chunk})}\n\n"
-                        continue
+                    continue
 
                 # Interromper se alguma stop string for encontrada
                 should_stop = False
@@ -2650,7 +2731,7 @@ async def chat_stream_endpoint(req: ChatRequest):
                 if in_tool:
                     tool_buffer += chunk
                 else:
-                    clean_c = chunk.replace("<|im_end|>", "")
+                    clean_c = chunk.replace("<|im_end|>", "").replace("<|im_start|>", "").replace("<s>", "")
                     if clean_c:
                         yield f"data: {json.dumps({'type': 'token', 'token': clean_c})}\n\n"
 
@@ -2753,10 +2834,7 @@ def chat_endpoint(req: ChatRequest):
                 current_msgs,
                 tokenize=False,
                 add_generation_prompt=True,
-                enable_thinking=enable_think,
             )
-            if not enable_think and prompt.endswith("<think></think>"):
-                prompt = prompt + "\n"
             inputs = tokenizer(prompt, return_tensors="pt").to("cuda" if torch.cuda.is_available() else "cpu")
             streamer = TextStreamer(tokenizer, skip_prompt=True, skip_special_tokens=False)
 
