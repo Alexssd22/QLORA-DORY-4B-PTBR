@@ -279,14 +279,41 @@ def configure_user_settings(hw):
         context_window = default_context
 
     settings = {
+        # ⏱ Contexto e desempenho (Padrão LM Bionic)
+        "auto_optimize": (profile == "auto"),
+        "context_length": context_window,
+        "context_window": context_window,
+        "gpu_offload": 40 if hw.get("cuda_available") else 0,
+        "cpu_threads": min(os.cpu_count() or 4, 8),
+        "eval_batch_size": 2048,
+        "physical_batch_size": 512,
+        "max_concurrent_predictions": 1,
+        "flash_attention": True,
+
+        # ⚙️ Geração (Padrão LM Bionic)
+        "temperature": 0.7,
+        "limit_response_length": True,
+        "max_tokens": max_tokens,
+        "context_overflow": "truncate_middle",
+        "stop_strings": ["<|im_end|>", "<|endoftext|>"],
+
+        # 🧠 Raciocínio (Padrão LM Bionic & Dory Recorrente)
+        "enable_thinking": (thinking_mode != "off"),
+        "reasoning_budget_enabled": True,
+        "reasoning_budget": thinking_tokens if thinking_tokens > 0 else 4096,
+        "reasoning_budget_message": "I have to answer now.",
         "n_recurrent_loops": loops,
+
+        # 💾 Memória (Padrão LM Bionic)
+        "offload_kv_cache_gpu": hw.get("cuda_available", True),
+        "unified_kv_cache": True,
+        "context_checkpoints": 32,
+
+        # Legado e Servidor
         "profile": profile,
         "profile_name": profile_name,
-        "max_tokens": max_tokens,
-        "context_window": context_window,
         "thinking_mode": thinking_mode,
         "thinking_max_tokens": thinking_tokens,
-        "temperature": 0.65,
         "top_p": 0.9,
         "repetition_penalty": 1.10,
         "quantization": quant,

@@ -50,14 +50,41 @@ os.makedirs(AGENTS_DIR, exist_ok=True)
 os.makedirs(SKILLS_DIR, exist_ok=True)
 
 DEFAULT_SETTINGS = {
+    # ⏱ Contexto e desempenho (LM Bionic)
+    "auto_optimize": True,
+    "context_length": 32768,
+    "gpu_offload": 40,
+    "cpu_threads": min(os.cpu_count() or 4, 8),
+    "eval_batch_size": 2048,
+    "physical_batch_size": 512,
+    "max_concurrent_predictions": 1,
+    "flash_attention": True,
+
+    # ⚙️ Geração (LM Bionic)
+    "temperature": 0.7,
+    "limit_response_length": True,
+    "max_tokens": 1024,
+    "context_overflow": "truncate_middle",
+    "stop_strings": ["<|im_end|>", "<|endoftext|>"],
+
+    # 🧠 Raciocínio (LM Bionic & Dory)
+    "enable_thinking": True,
+    "reasoning_budget_enabled": True,
+    "reasoning_budget": 4096,
+    "reasoning_budget_message": "I have to answer now.",
     "n_recurrent_loops": 2,
+
+    # 💾 Memória (LM Bionic)
+    "offload_kv_cache_gpu": True,
+    "unified_kv_cache": True,
+    "context_checkpoints": 32,
+
+    # Servidor e legado
     "profile": "auto",
     "profile_name": "Automático (Otimizado para o Hardware)",
-    "max_tokens": 512,
-    "context_window": 4096,
+    "context_window": 32768,
     "thinking_mode": "auto",
-    "thinking_max_tokens": 256,
-    "temperature": 0.65,
+    "thinking_max_tokens": 512,
     "top_p": 0.9,
     "repetition_penalty": 1.10,
     "quantization": "bf16",
@@ -1255,14 +1282,48 @@ HTML_PAGE = r"""<!DOCTYPE html>
         .cursor { display: inline-block; width: 6px; height: 15px; background-color: var(--accent); animation: blink 1s infinite; vertical-align: middle; margin-left: 2px; }
         @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
 
-        /* Modal de Configurações */
-        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: none; align-items: center; justify-content: center; z-index: 1000; }
-        .modal { background: var(--panel-bg); border: 1px solid var(--card-border); border-radius: 12px; width: 90%; max-width: 500px; padding: 20px; }
-        .modal-title { font-size: 1.1rem; font-weight: 700; margin-bottom: 14px; color: #fff; display: flex; justify-content: space-between; align-items: center; }
-        .form-group { margin-bottom: 12px; }
-        .form-group label { display: block; font-size: 0.8rem; color: var(--text-dim); margin-bottom: 4px; }
-        .form-group select, .form-group input { width: 100%; background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 6px; color: #fff; padding: 8px 10px; font-size: 0.85rem; outline: none; }
-        .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+        /* Modal de Configurações - Estilo LM Bionic */
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.75); backdrop-filter: blur(4px); display: none; align-items: center; justify-content: center; z-index: 1000; padding: 16px; }
+        .modal { background: #0c1322; border: 1px solid #1e293b; border-radius: 14px; width: 100%; max-width: 720px; max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 20px 45px rgba(0,0,0,0.65); overflow: hidden; }
+        .modal-header { padding: 14px 20px; border-bottom: 1px solid #1e293b; display: flex; justify-content: space-between; align-items: center; background: #0f172a; }
+        .modal-title { font-size: 1.1rem; font-weight: 700; color: #f1f5f9; display: flex; align-items: center; gap: 8px; }
+        .modal-close { cursor: pointer; font-size: 1.4rem; color: #94a3b8; transition: color 0.15s; line-height: 1; }
+        .modal-close:hover { color: #fff; }
+        
+        .modal-body { padding: 16px 20px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 16px; }
+        .settings-card { background: #131c31; border: 1px solid #1e293b; border-radius: 10px; overflow: hidden; }
+        .settings-card-header { padding: 10px 14px; background: #182239; border-bottom: 1px solid #1e293b; font-size: 0.88rem; font-weight: 700; color: #38bdf8; display: flex; align-items: center; gap: 8px; }
+        .settings-card-body { padding: 14px; display: flex; flex-direction: column; gap: 14px; }
+        
+        .setting-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+        .setting-col { display: flex; flex-direction: column; gap: 6px; }
+        .setting-label-area { display: flex; flex-direction: column; gap: 2px; }
+        .setting-label { font-size: 0.85rem; font-weight: 600; color: #e2e8f0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+        .setting-subtext { font-size: 0.74rem; color: #64748b; }
+        
+        .help-icon { display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; border-radius: 50%; border: 1px solid #475569; font-size: 0.68rem; color: #94a3b8; cursor: help; user-select: none; }
+        .badge-recommended { background: rgba(56, 189, 248, 0.15); border: 1px solid #0284c7; color: #38bdf8; font-size: 0.65rem; font-weight: 700; padding: 2px 7px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .badge-experimental { background: rgba(148, 163, 184, 0.12); border: 1px solid #475569; color: #94a3b8; font-size: 0.65rem; font-weight: 600; padding: 2px 6px; border-radius: 4px; }
+        
+        .ctrl-input-num { width: 110px; background: #0c1322; border: 1px solid #334155; border-radius: 6px; color: #fff; padding: 6px 10px; font-size: 0.85rem; text-align: right; outline: none; transition: border-color 0.2s; }
+        .ctrl-input-num:focus { border-color: #38bdf8; }
+        .ctrl-input-num:disabled { opacity: 0.4; cursor: not-allowed; }
+        .ctrl-input-text { width: 100%; background: #0c1322; border: 1px solid #334155; border-radius: 6px; color: #fff; padding: 7px 10px; font-size: 0.84rem; outline: none; }
+        .ctrl-input-text:focus { border-color: #38bdf8; }
+        .ctrl-select { background: #0c1322; border: 1px solid #334155; border-radius: 6px; color: #fff; padding: 6px 10px; font-size: 0.85rem; outline: none; }
+        .ctrl-select:focus { border-color: #38bdf8; }
+        
+        .ctrl-slider { width: 100%; accent-color: #38bdf8; cursor: pointer; height: 5px; }
+        
+        .switch { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider-round { position: absolute; cursor: pointer; inset: 0; background-color: #334155; transition: .2s; border-radius: 24px; }
+        .slider-round:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: #fff; transition: .2s; border-radius: 50%; }
+        input:checked + .slider-round { background-color: #0284c7; }
+        input:checked + .slider-round:before { transform: translateX(20px); }
+        
+        .ctrl-checkbox { width: 16px; height: 16px; accent-color: #0284c7; cursor: pointer; }
+        .modal-footer { padding: 12px 20px; border-top: 1px solid #1e293b; background: #0f172a; display: flex; justify-content: space-between; align-items: center; }
     </style>
 </head>
 <body>
@@ -1315,38 +1376,308 @@ HTML_PAGE = r"""<!DOCTYPE html>
         </div>
     </footer>
 
-    <!-- Modal de Configurações -->
+    <!-- Modal de Configurações - Padrão LM Bionic -->
     <div class="modal-overlay" id="modal-settings">
         <div class="modal">
-            <div class="modal-title">
-                <span>⚙️ Ajustes do Dory 4B</span>
-                <span style="cursor:pointer;" onclick="closeSettingsModal()">×</span>
+            <div class="modal-header">
+                <div class="modal-title">
+                    <span>⚙️ Ajustes do Dory 4B — Contexto e Execução</span>
+                </div>
+                <span class="modal-close" onclick="closeSettingsModal()">×</span>
             </div>
-            <div class="form-group">
-                <label>Loops de Raciocínio (1 a 4):</label>
-                <select id="cfg-loops">
-                    <option value="1">1 Loop (Mais rápido)</option>
-                    <option value="2">2 Loops (Padrão balanceado)</option>
-                    <option value="3">3 Loops (Raciocínio profundo)</option>
-                    <option value="4">4 Loops (Precisão máxima)</option>
-                </select>
+            
+            <div class="modal-body">
+                <!-- 1. Contexto e Desempenho -->
+                <div class="settings-card">
+                    <div class="settings-card-header">
+                        <span>⏱ Contexto e desempenho</span>
+                    </div>
+                    <div class="settings-card-body">
+                        <!-- Automatic Optimize -->
+                        <div class="setting-row">
+                            <div class="setting-label-area">
+                                <div class="setting-label">
+                                    <span>Automatic Optimize Based on Hardware</span>
+                                    <span class="help-icon" title="Otimiza automaticamente janela de contexto, offload na GPU e threads com base no seu PC.">?</span>
+                                    <span class="badge-recommended">RECOMMENDED</span>
+                                </div>
+                            </div>
+                            <label class="switch">
+                                <input type="checkbox" id="cfg-auto-optimize" onchange="toggleAutoOptimize(this.checked)">
+                                <span class="slider-round"></span>
+                            </label>
+                        </div>
+
+                        <!-- Context Length -->
+                        <div class="setting-col">
+                            <div class="setting-row">
+                                <div class="setting-label-area">
+                                    <div class="setting-label">
+                                        <span>Context Length</span>
+                                        <span class="help-icon" title="Tamanho máximo da janela de contexto em tokens (máx. suportado: 262.144).">?</span>
+                                    </div>
+                                    <div class="setting-subtext">Model supports up to 262144 tokens</div>
+                                </div>
+                                <input type="number" id="cfg-context-length" class="ctrl-input-num" min="1024" max="262144" step="1024" oninput="syncSlider('cfg-context-length', 'cfg-context-length-slider')">
+                            </div>
+                            <input type="range" id="cfg-context-length-slider" class="ctrl-slider" min="1024" max="262144" step="1024" oninput="syncInput('cfg-context-length-slider', 'cfg-context-length')">
+                        </div>
+
+                        <!-- GPU Offload -->
+                        <div class="setting-col">
+                            <div class="setting-row">
+                                <div class="setting-label-area">
+                                    <div class="setting-label">
+                                        <span>GPU Offload</span>
+                                        <span class="help-icon" title="Quantidade de camadas mantidas na VRAM da GPU (40 camadas no total).">?</span>
+                                    </div>
+                                </div>
+                                <input type="number" id="cfg-gpu-offload" class="ctrl-input-num" min="0" max="40" step="1" oninput="syncSlider('cfg-gpu-offload', 'cfg-gpu-offload-slider')">
+                            </div>
+                            <input type="range" id="cfg-gpu-offload-slider" class="ctrl-slider" min="0" max="40" step="1" oninput="syncInput('cfg-gpu-offload-slider', 'cfg-gpu-offload')">
+                        </div>
+
+                        <!-- CPU Thread Pool Size -->
+                        <div class="setting-col">
+                            <div class="setting-row">
+                                <div class="setting-label-area">
+                                    <div class="setting-label">
+                                        <span>CPU Thread Pool Size</span>
+                                        <span class="help-icon" title="Número de threads simultâneas alocadas pela CPU.">?</span>
+                                    </div>
+                                </div>
+                                <input type="number" id="cfg-cpu-threads" class="ctrl-input-num" min="1" max="32" step="1" oninput="syncSlider('cfg-cpu-threads', 'cfg-cpu-threads-slider')">
+                            </div>
+                            <input type="range" id="cfg-cpu-threads-slider" class="ctrl-slider" min="1" max="32" step="1" oninput="syncInput('cfg-cpu-threads-slider', 'cfg-cpu-threads')">
+                        </div>
+
+                        <!-- Evaluation Batch Size -->
+                        <div class="setting-row">
+                            <div class="setting-label-area">
+                                <div class="setting-label">
+                                    <span>Evaluation Batch Size</span>
+                                    <span class="help-icon" title="Tamanho do lote para avaliação rápida do prompt.">?</span>
+                                </div>
+                            </div>
+                            <input type="number" id="cfg-eval-batch" class="ctrl-input-num" min="128" max="8192" step="128">
+                        </div>
+
+                        <!-- Physical Batch Size -->
+                        <div class="setting-row">
+                            <div class="setting-label-area">
+                                <div class="setting-label">
+                                    <span>Physical Batch Size</span>
+                                    <span class="help-icon" title="Tamanho físico de memória por micro-batch.">?</span>
+                                </div>
+                            </div>
+                            <input type="number" id="cfg-physical-batch" class="ctrl-input-num" min="64" max="2048" step="64">
+                        </div>
+
+                        <!-- Max Concurrent Predictions -->
+                        <div class="setting-row">
+                            <div class="setting-label-area">
+                                <div class="setting-label">
+                                    <span>Max Concurrent Predictions</span>
+                                    <span class="help-icon" title="Quantidade máxima de previsões paralelas.">?</span>
+                                    <span class="badge-experimental">Experimental</span>
+                                </div>
+                            </div>
+                            <input type="number" id="cfg-max-concurrent" class="ctrl-input-num" min="1" max="16" step="1">
+                        </div>
+
+                        <!-- Flash Attention -->
+                        <div class="setting-row">
+                            <div class="setting-label-area">
+                                <div class="setting-label">
+                                    <span>Flash Attention</span>
+                                    <span class="help-icon" title="Aceleração de atenção por hardware (SDPA na RTX).">?</span>
+                                </div>
+                            </div>
+                            <label class="switch">
+                                <input type="checkbox" id="cfg-flash-attn">
+                                <span class="slider-round"></span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. Geração -->
+                <div class="settings-card">
+                    <div class="settings-card-header">
+                        <span>⚙️ Geração</span>
+                    </div>
+                    <div class="settings-card-body">
+                        <!-- Temperature -->
+                        <div class="setting-col">
+                            <div class="setting-row">
+                                <div class="setting-label-area">
+                                    <div class="setting-label">
+                                        <span>Temperature</span>
+                                        <span class="help-icon" title="Criatividade da amostragem (0 = determinístico, 0.8 = balanceado).">?</span>
+                                    </div>
+                                </div>
+                                <input type="number" id="cfg-temperature" class="ctrl-input-num" min="0.0" max="2.0" step="0.05" oninput="syncSlider('cfg-temperature', 'cfg-temp-slider')">
+                            </div>
+                            <input type="range" id="cfg-temp-slider" class="ctrl-slider" min="0.0" max="2.0" step="0.05" oninput="syncInput('cfg-temp-slider', 'cfg-temperature')">
+                        </div>
+
+                        <!-- Limit Response Length -->
+                        <div class="setting-row">
+                            <div class="setting-label-area">
+                                <div class="setting-label">
+                                    <input type="checkbox" id="cfg-limit-len-check" class="ctrl-checkbox" onchange="toggleLimitLen(this.checked)">
+                                    <label for="cfg-limit-len-check" style="cursor:pointer;">Limit Response Length</label>
+                                    <span class="help-icon" title="Limita o comprimento máximo da resposta em tokens.">?</span>
+                                </div>
+                            </div>
+                            <input type="number" id="cfg-max-tokens" class="ctrl-input-num" min="64" max="8192" step="64">
+                        </div>
+
+                        <!-- Context Overflow -->
+                        <div class="setting-row">
+                            <div class="setting-label-area">
+                                <div class="setting-label">
+                                    <span>Context Overflow</span>
+                                    <span class="help-icon" title="Como agir quando o diálogo ultrapassar o limite de contexto.">?</span>
+                                </div>
+                            </div>
+                            <select id="cfg-context-overflow" class="ctrl-select">
+                                <option value="truncate_middle">Truncate Middle</option>
+                                <option value="rolling_window">Rolling Window</option>
+                                <option value="stop_at_limit">Stop at Limit</option>
+                            </select>
+                        </div>
+
+                        <!-- Stop Strings -->
+                        <div class="setting-col">
+                            <div class="setting-label-area">
+                                <div class="setting-label">
+                                    <span>Stop Strings</span>
+                                    <span class="help-icon" title="Sequências que interrompem a geração (separadas por vírgula).">?</span>
+                                </div>
+                            </div>
+                            <input type="text" id="cfg-stop-strings" class="ctrl-input-text" placeholder="Enter a string and press ↵">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. Raciocínio -->
+                <div class="settings-card">
+                    <div class="settings-card-header">
+                        <span>🧠 Raciocínio</span>
+                    </div>
+                    <div class="settings-card-body">
+                        <!-- Enable Thinking -->
+                        <div class="setting-row">
+                            <div class="setting-label-area">
+                                <div class="setting-label">
+                                    <span>Enable Thinking</span>
+                                </div>
+                                <div class="setting-subtext">Controls thinking for chat templates that support enable thinking.</div>
+                            </div>
+                            <label class="switch">
+                                <input type="checkbox" id="cfg-enable-thinking">
+                                <span class="slider-round"></span>
+                            </label>
+                        </div>
+
+                        <!-- Reasoning Budget -->
+                        <div class="setting-row">
+                            <div class="setting-label-area">
+                                <div class="setting-label">
+                                    <input type="checkbox" id="cfg-reasoning-budget-check" class="ctrl-checkbox" onchange="toggleReasoningBudget(this.checked)">
+                                    <label for="cfg-reasoning-budget-check" style="cursor:pointer;">Reasoning Budget</label>
+                                    <span class="help-icon" title="Orçamento máximo de tokens para pensar antes de concluir a resposta.">?</span>
+                                </div>
+                            </div>
+                            <input type="number" id="cfg-reasoning-budget" class="ctrl-input-num" min="128" max="32768" step="128">
+                        </div>
+
+                        <!-- Reasoning Budget Message -->
+                        <div class="setting-col">
+                            <div class="setting-label-area">
+                                <div class="setting-label">
+                                    <span>Reasoning Budget Message</span>
+                                    <span class="help-icon" title="Mensagem interna acionada ao atingir o limite de raciocínio.">?</span>
+                                </div>
+                            </div>
+                            <input type="text" id="cfg-reasoning-budget-msg" class="ctrl-input-text" placeholder="I have to answer now.">
+                        </div>
+
+                        <!-- Loops Recorrentes Dory -->
+                        <div class="setting-row">
+                            <div class="setting-label-area">
+                                <div class="setting-label">
+                                    <span>Loops de Raciocínio Recorrente (n_recurrent_loops)</span>
+                                    <span class="help-icon" title="Passagens adicionais pelas camadas do modelo (1 a 4).">?</span>
+                                </div>
+                                <div class="setting-subtext">Padrão nativo do Dory: 2 Loops</div>
+                            </div>
+                            <select id="cfg-loops" class="ctrl-select">
+                                <option value="1">1 Loop (Mais rápido)</option>
+                                <option value="2">2 Loops (Recomendado)</option>
+                                <option value="3">3 Loops (Profundo)</option>
+                                <option value="4">4 Loops (Precisão máxima)</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 4. Memória -->
+                <div class="settings-card">
+                    <div class="settings-card-header">
+                        <span>💾 Memória</span>
+                    </div>
+                    <div class="settings-card-body">
+                        <!-- Offload KV Cache to GPU Memory -->
+                        <div class="setting-row">
+                            <div class="setting-label-area">
+                                <div class="setting-label">
+                                    <span>Offload KV Cache to GPU Memory</span>
+                                    <span class="help-icon" title="Mantém os pares de Key-Value da atenção alocados diretamente na VRAM.">?</span>
+                                </div>
+                            </div>
+                            <label class="switch">
+                                <input type="checkbox" id="cfg-offload-kv">
+                                <span class="slider-round"></span>
+                            </label>
+                        </div>
+
+                        <!-- Unified KV Cache -->
+                        <div class="setting-row">
+                            <div class="setting-label-area">
+                                <div class="setting-label">
+                                    <span>Unified KV Cache</span>
+                                    <span class="help-icon" title="Cache KV unificado para economia de VRAM.">?</span>
+                                    <span class="badge-experimental">Experimental</span>
+                                </div>
+                            </div>
+                            <label class="switch">
+                                <input type="checkbox" id="cfg-unified-kv">
+                                <span class="slider-round"></span>
+                            </label>
+                        </div>
+
+                        <!-- Context Checkpoints -->
+                        <div class="setting-row">
+                            <div class="setting-label-area">
+                                <div class="setting-label">
+                                    <span>Context Checkpoints</span>
+                                    <span class="help-icon" title="Checkpoints de contexto preservados para ramificações.">?</span>
+                                </div>
+                            </div>
+                            <input type="number" id="cfg-context-checkpoints" class="ctrl-input-num" min="1" max="128" step="1">
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div class="form-group">
-                <label>Modo de Raciocínio (<think>):</label>
-                <select id="cfg-think">
-                    <option value="auto">Automático</option>
-                    <option value="off">Desligado (Sem <think>)</option>
-                    <option value="short">Curto (até 128 tokens)</option>
-                    <option value="long">Longo (até 512 tokens)</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label>Temperatura de Resposta:</label>
-                <input type="number" id="cfg-temp" min="0.1" max="1.5" step="0.05" value="0.65">
-            </div>
-            <div class="modal-actions">
-                <button class="btn-icon" onclick="closeSettingsModal()">Cancelar</button>
-                <button class="btn-icon" style="background:var(--accent);color:#0a0f1d;font-weight:700;" onclick="saveClientSettings()">Salvar Preferências</button>
+
+            <div class="modal-footer">
+                <button class="btn-icon" onclick="resetSettingsToDefaults()">Restaurar Padrões</button>
+                <div style="display:flex; gap:8px;">
+                    <button class="btn-icon" onclick="closeSettingsModal()">Cancelar</button>
+                    <button class="btn-icon" style="background:var(--accent);color:#0a0f1d;font-weight:700;" onclick="saveClientSettings()">💾 Salvar Preferências</button>
+                </div>
             </div>
         </div>
     </div>
@@ -1894,6 +2225,7 @@ Como posso te ajudar agora?</div>
         }
 
         function openSettingsModal() {
+            populateSettingsModal(currentSettings);
             document.getElementById('modal-settings').style.display = 'flex';
         }
 
@@ -1901,22 +2233,165 @@ Como posso te ajudar agora?</div>
             document.getElementById('modal-settings').style.display = 'none';
         }
 
-        async function saveClientSettings() {
-            const loops = parseInt(document.getElementById('cfg-loops').value);
-            const think = document.getElementById('cfg-think').value;
-            const temp = parseFloat(document.getElementById('cfg-temp').value);
+        function syncSlider(inputId, sliderId) {
+            const val = document.getElementById(inputId).value;
+            const slider = document.getElementById(sliderId);
+            if (slider) slider.value = val;
+        }
 
-            currentSettings.n_recurrent_loops = loops;
-            currentSettings.thinking_mode = think;
-            currentSettings.temperature = temp;
+        function syncInput(sliderId, inputId) {
+            const val = document.getElementById(sliderId).value;
+            const inp = document.getElementById(inputId);
+            if (inp) inp.value = val;
+        }
+
+        function toggleLimitLen(checked) {
+            const el = document.getElementById('cfg-max-tokens');
+            if (el) el.disabled = !checked;
+        }
+
+        function toggleReasoningBudget(checked) {
+            const el = document.getElementById('cfg-reasoning-budget');
+            if (el) el.disabled = !checked;
+        }
+
+        function toggleAutoOptimize(checked) {
+            if (checked) {
+                document.getElementById('cfg-context-length').value = 32768;
+                document.getElementById('cfg-context-length-slider').value = 32768;
+                document.getElementById('cfg-gpu-offload').value = 40;
+                document.getElementById('cfg-gpu-offload-slider').value = 40;
+                document.getElementById('cfg-cpu-threads').value = 4;
+                document.getElementById('cfg-cpu-threads-slider').value = 4;
+                document.getElementById('cfg-eval-batch').value = 2048;
+                document.getElementById('cfg-physical-batch').value = 512;
+                document.getElementById('cfg-flash-attn').checked = true;
+                document.getElementById('cfg-offload-kv').checked = true;
+                document.getElementById('cfg-unified-kv').checked = true;
+            }
+        }
+
+        function populateSettingsModal(s) {
+            if (!s) s = {};
+            // 1. Contexto e desempenho
+            document.getElementById('cfg-auto-optimize').checked = s.auto_optimize !== false;
+            const ctxLen = s.context_length || s.context_window || 32768;
+            document.getElementById('cfg-context-length').value = ctxLen;
+            document.getElementById('cfg-context-length-slider').value = ctxLen;
+
+            const gpuOff = (s.gpu_offload !== undefined) ? s.gpu_offload : 40;
+            document.getElementById('cfg-gpu-offload').value = gpuOff;
+            document.getElementById('cfg-gpu-offload-slider').value = gpuOff;
+
+            const cpuThr = s.cpu_threads || 4;
+            document.getElementById('cfg-cpu-threads').value = cpuThr;
+            document.getElementById('cfg-cpu-threads-slider').value = cpuThr;
+
+            document.getElementById('cfg-eval-batch').value = s.eval_batch_size || 2048;
+            document.getElementById('cfg-physical-batch').value = s.physical_batch_size || 512;
+            document.getElementById('cfg-max-concurrent').value = s.max_concurrent_predictions || 1;
+            document.getElementById('cfg-flash-attn').checked = s.flash_attention !== false;
+
+            // 2. Geração
+            const temp = (s.temperature !== undefined) ? s.temperature : 0.7;
+            document.getElementById('cfg-temperature').value = temp;
+            document.getElementById('cfg-temp-slider').value = temp;
+
+            const limitLen = s.limit_response_length !== false;
+            document.getElementById('cfg-limit-len-check').checked = limitLen;
+            document.getElementById('cfg-max-tokens').value = s.max_tokens || 1024;
+            toggleLimitLen(limitLen);
+
+            document.getElementById('cfg-context-overflow').value = s.context_overflow || "truncate_middle";
+            const stopStrs = Array.isArray(s.stop_strings) ? s.stop_strings.join(', ') : (s.stop_strings || "<|im_end|>, <|endoftext|>");
+            document.getElementById('cfg-stop-strings').value = stopStrs;
+
+            // 3. Raciocínio
+            document.getElementById('cfg-enable-thinking').checked = s.enable_thinking !== false;
+            const budgetEnabled = s.reasoning_budget_enabled !== false;
+            document.getElementById('cfg-reasoning-budget-check').checked = budgetEnabled;
+            document.getElementById('cfg-reasoning-budget').value = s.reasoning_budget || 4096;
+            toggleReasoningBudget(budgetEnabled);
+            document.getElementById('cfg-reasoning-budget-msg').value = s.reasoning_budget_message || "I have to answer now.";
+            document.getElementById('cfg-loops').value = s.n_recurrent_loops || 2;
+
+            // 4. Memória
+            document.getElementById('cfg-offload-kv').checked = s.offload_kv_cache_gpu !== false;
+            document.getElementById('cfg-unified-kv').checked = s.unified_kv_cache !== false;
+            document.getElementById('cfg-context-checkpoints').value = s.context_checkpoints || 32;
+        }
+
+        function resetSettingsToDefaults() {
+            populateSettingsModal({
+                auto_optimize: true,
+                context_length: 32768,
+                gpu_offload: 40,
+                cpu_threads: 4,
+                eval_batch_size: 2048,
+                physical_batch_size: 512,
+                max_concurrent_predictions: 1,
+                flash_attention: true,
+                temperature: 0.7,
+                limit_response_length: true,
+                max_tokens: 1024,
+                context_overflow: "truncate_middle",
+                stop_strings: ["<|im_end|>", "<|endoftext|>"],
+                enable_thinking: true,
+                reasoning_budget_enabled: true,
+                reasoning_budget: 4096,
+                reasoning_budget_message: "I have to answer now.",
+                n_recurrent_loops: 2,
+                offload_kv_cache_gpu: true,
+                unified_kv_cache: true,
+                context_checkpoints: 32
+            });
+        }
+
+        async function saveClientSettings() {
+            const stopStrRaw = document.getElementById('cfg-stop-strings').value;
+            const stopList = stopStrRaw.split(',').map(s => s.trim()).filter(s => s.length > 0);
+
+            const newSettings = {
+                ...currentSettings,
+                // Contexto e desempenho
+                auto_optimize: document.getElementById('cfg-auto-optimize').checked,
+                context_length: parseInt(document.getElementById('cfg-context-length').value) || 32768,
+                context_window: parseInt(document.getElementById('cfg-context-length').value) || 32768,
+                gpu_offload: parseInt(document.getElementById('cfg-gpu-offload').value) || 40,
+                cpu_threads: parseInt(document.getElementById('cfg-cpu-threads').value) || 4,
+                eval_batch_size: parseInt(document.getElementById('cfg-eval-batch').value) || 2048,
+                physical_batch_size: parseInt(document.getElementById('cfg-physical-batch').value) || 512,
+                max_concurrent_predictions: parseInt(document.getElementById('cfg-max-concurrent').value) || 1,
+                flash_attention: document.getElementById('cfg-flash-attn').checked,
+
+                // Geração
+                temperature: parseFloat(document.getElementById('cfg-temperature').value) || 0.7,
+                limit_response_length: document.getElementById('cfg-limit-len-check').checked,
+                max_tokens: parseInt(document.getElementById('cfg-max-tokens').value) || 1024,
+                context_overflow: document.getElementById('cfg-context-overflow').value,
+                stop_strings: stopList.length > 0 ? stopList : ["<|im_end|>", "<|endoftext|>"],
+
+                // Raciocínio
+                enable_thinking: document.getElementById('cfg-enable-thinking').checked,
+                reasoning_budget_enabled: document.getElementById('cfg-reasoning-budget-check').checked,
+                reasoning_budget: parseInt(document.getElementById('cfg-reasoning-budget').value) || 4096,
+                reasoning_budget_message: document.getElementById('cfg-reasoning-budget-msg').value || "I have to answer now.",
+                n_recurrent_loops: parseInt(document.getElementById('cfg-loops').value) || 2,
+
+                // Memória
+                offload_kv_cache_gpu: document.getElementById('cfg-offload-kv').checked,
+                unified_kv_cache: document.getElementById('cfg-unified-kv').checked,
+                context_checkpoints: parseInt(document.getElementById('cfg-context-checkpoints').value) || 32,
+            };
 
             try {
-                await fetch('/api/settings', {
+                const res = await fetch('/api/settings', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(currentSettings)
+                    body: JSON.stringify(newSettings)
                 });
-                document.getElementById('badge-loops').innerText = `⚡ ${loops} Loops`;
+                currentSettings = await res.json();
+                document.getElementById('badge-loops').innerText = `⚡ ${currentSettings.n_recurrent_loops} Loops`;
                 closeSettingsModal();
             } catch (e) {
                 alert("Erro ao salvar configurações no servidor: " + e.message);
@@ -1957,8 +2432,13 @@ def get_settings():
 def update_settings(payload: Dict[str, Any]):
     global SETTINGS
     SETTINGS.update(payload)
+    if "cpu_threads" in payload:
+        try:
+            torch.set_num_threads(int(payload["cpu_threads"]))
+        except Exception:
+            pass
     save_settings(SETTINGS)
-    return {"status": "ok", "settings": SETTINGS}
+    return SETTINGS
 
 @app.get("/api/telemetry")
 def get_telemetry():
@@ -2037,13 +2517,33 @@ async def chat_stream_endpoint(req: ChatRequest):
     else:
         current_msgs = list(raw_msgs)
 
-    # Janela deslizante de contexto
+    # 1. Resolução do limite e política de overflow de contexto
+    overflow_mode = SETTINGS.get("context_overflow", "truncate_middle")
     if len(current_msgs) > 10:
-        current_msgs = [current_msgs[0]] + current_msgs[-8:]
+        if overflow_mode == "truncate_middle":
+            current_msgs = [current_msgs[0]] + current_msgs[-8:]
+        elif overflow_mode == "rolling_window":
+            current_msgs = [current_msgs[0]] + current_msgs[-6:]
+        elif overflow_mode == "stop_at_limit":
+            current_msgs = current_msgs[:10]
 
-    enable_think = bool(req.enable_thinking)
-    max_new = req.max_tokens or int(SETTINGS.get("max_tokens", 512))
-    temp = req.temperature or float(SETTINGS.get("temperature", 0.65))
+    # 2. Resolução de raciocínio, limites e temperatura
+    enable_think = req.enable_thinking if req.enable_thinking is not None else bool(SETTINGS.get("enable_thinking", True))
+    
+    if SETTINGS.get("limit_response_length", True):
+        max_new = req.max_tokens or int(SETTINGS.get("max_tokens", 1024))
+    else:
+        max_new = req.max_tokens or 4096
+
+    temp = req.temperature if req.temperature is not None else float(SETTINGS.get("temperature", 0.7))
+    
+    stop_strings = SETTINGS.get("stop_strings", ["<|im_end|>", "<|endoftext|>"])
+    if isinstance(stop_strings, str):
+        stop_strings = [s.strip() for s in stop_strings.split(",") if s.strip()]
+
+    reasoning_budget_enabled = bool(SETTINGS.get("reasoning_budget_enabled", True))
+    reasoning_budget = int(SETTINGS.get("reasoning_budget", 4096))
+    reasoning_budget_msg = str(SETTINGS.get("reasoning_budget_message", "I have to answer now."))
 
     async def sse_generator():
         MAX_TURNS = 3
@@ -2112,21 +2612,36 @@ async def chat_stream_endpoint(req: ChatRequest):
             in_tool = False
             tool_buffer = ""
 
+            think_tokens_count = 0
             for chunk in streamer:
                 full_reply += chunk
                 total_tokens += 1
 
-                # Detectar tags <think> e </think>
+                # Detectar tags <think> e </think> e orçamento de raciocínio
                 if in_think:
+                    think_tokens_count += 1
                     if "</think>" in chunk:
                         parts = chunk.split("</think>", 1)
                         if parts[0]:
                             yield f"data: {json.dumps({'type': 'think_token', 'token': parts[0]})}\n\n"
                         in_think = False
                         chunk = parts[1]
+                    elif reasoning_budget_enabled and think_tokens_count >= reasoning_budget:
+                        in_think = False
+                        yield f"data: {json.dumps({'type': 'think_token', 'token': f'\n[{reasoning_budget_msg}]\n'})}\n\n"
+                        chunk = ""
                     else:
                         yield f"data: {json.dumps({'type': 'think_token', 'token': chunk})}\n\n"
                         continue
+
+                # Interromper se alguma stop string for encontrada
+                should_stop = False
+                for s_str in stop_strings:
+                    if s_str and s_str in full_reply:
+                        should_stop = True
+                        break
+                if should_stop:
+                    break
 
                 # Detectar início de chamada de ferramenta
                 if ("<tool_call>" in full_reply or "<function=" in full_reply or "<function name=" in full_reply) and not in_tool:
@@ -2189,10 +2704,16 @@ def chat_endpoint(req: ChatRequest):
         else:
             current_msgs = list(raw_msgs)
 
+        overflow_mode = SETTINGS.get("context_overflow", "truncate_middle")
         if len(current_msgs) > 10:
-            current_msgs = [current_msgs[0]] + current_msgs[-8:]
+            if overflow_mode == "truncate_middle":
+                current_msgs = [current_msgs[0]] + current_msgs[-8:]
+            elif overflow_mode == "rolling_window":
+                current_msgs = [current_msgs[0]] + current_msgs[-6:]
+            elif overflow_mode == "stop_at_limit":
+                current_msgs = current_msgs[:10]
 
-        enable_think = bool(req.enable_thinking)
+        enable_think = req.enable_thinking if req.enable_thinking is not None else bool(SETTINGS.get("enable_thinking", True))
         user_snippet = raw_msgs[-1]["content"][:60].replace("\n", " ") if raw_msgs else ""
         print("\n" + "=" * 65)
         print(f"[🤖 Dory 4B] Nova Mensagem: \"{user_snippet}...\"")
