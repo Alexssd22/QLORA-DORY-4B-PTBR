@@ -84,6 +84,14 @@ def main():
     merged_model.save_pretrained(OUTPUT_MERGED, safe_serialization=True)
     tokenizer.save_pretrained(OUTPUT_MERGED)
 
+    # Preservar o chat template limpo em Jinja no modelo mesclado
+    src_tmpl = os.path.join(LORA_PATH, "chat_template.jinja")
+    dst_tmpl = os.path.join(OUTPUT_MERGED, "chat_template.jinja")
+    if os.path.exists(src_tmpl):
+        import shutil
+        shutil.copy2(src_tmpl, dst_tmpl)
+        print("Chat template Jinja sincronizado com sucesso no modelo mesclado.")
+
     # Garantir eos_token_id e pad_token_id no config.json do modelo final
     cfg_file = os.path.join(OUTPUT_MERGED, "config.json")
     if os.path.exists(cfg_file):

@@ -8,7 +8,7 @@ echo   Iniciando Treinamento QLoRA - Dory 1.0 4B PT-BR
 echo   Hardware: NVIDIA GeForce RTX 4070 (12 GB VRAM)
 echo   Dataset: 19.260 amostras curadas em Portugues
 echo   Matematica: Hiperesfera nGPT com Normalizacao Exata
-echo   Meta: Passo 1000 (Refinamento Avancado de Sintaxe e Fluencia)
+echo   Meta: Passo 1200 (Refinamento Adicional de +200 Passos em Linguagem Natural)
 echo ============================================================
 echo.
 

@@ -23,6 +23,7 @@ from transformers import (
 from huggingface_hub import hf_hub_download
 from peft import (
     LoraConfig,
+    PeftModel,
     get_peft_model,
     prepare_model_for_kbit_training,
 )
@@ -83,19 +84,36 @@ def main():
     print(f"Modelo carregado na GPU! VRAM alocada: {torch.cuda.memory_allocated() / (1024**3):.2f} GB")
     model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=False)
 
-    # 3. Configurar LoRA de Alta Precisão (Rank 32, Alpha 64)
-    print("\n[4/5] Injetando Adaptadores LoRA...")
-    target_modules = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
-    peft_config = LoraConfig(
-        r=32,
-        lora_alpha=64,
-        target_modules=target_modules,
-        lora_dropout=0.05,
-        bias="none",
-        task_type="CAUSAL_LM",
-    )
+    # 3. Identificar checkpoint existente mais recente ou criar novos adaptadores
+    import glob
+    ckpts = glob.glob(os.path.join(OUTPUT_DIR, "checkpoint-*"))
+    latest_ckpt = None
+    latest_step = 0
+    for c in ckpts:
+        try:
+            s = int(os.path.basename(c).split("-")[-1])
+            if s > latest_step:
+                latest_step = s
+                latest_ckpt = c
+        except ValueError:
+            pass
 
-    model = get_peft_model(model, peft_config)
+    if latest_ckpt:
+        print(f"\n[🔄 Carregando Adaptadores Pré-treinados] Checkpoint encontrado: {latest_ckpt} (passo {latest_step})")
+        model = PeftModel.from_pretrained(model, latest_ckpt, is_trainable=True)
+    else:
+        print("\n[4/5] Injetando Adaptadores LoRA de Alta Precisão (Rank 32, Alpha 64)...")
+        target_modules = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+        peft_config = LoraConfig(
+            r=32,
+            lora_alpha=64,
+            target_modules=target_modules,
+            lora_dropout=0.05,
+            bias="none",
+            task_type="CAUSAL_LM",
+        )
+        model = get_peft_model(model, peft_config)
+
     model.print_trainable_parameters()
 
     # 4. Carregar Datasets e Aplicar Mascaramento de Prompt (Loss focado na Resposta)
@@ -108,7 +126,7 @@ def main():
         for messages in batch["messages"]:
             user_msgs = [m for m in messages if m["role"] != "assistant"]
             prompt_text = tokenizer.apply_chat_template(
-                user_msgs, tokenize=False, add_generation_prompt=True, enable_thinking=False
+                user_msgs, tokenize=False, add_generation_prompt=True
             )
             full_text = tokenizer.apply_chat_template(
                 messages, tokenize=False, add_generation_prompt=False
@@ -133,23 +151,24 @@ def main():
         remove_columns=dataset["train"].column_names,
     )
 
-    # 5. Argumentos de Treino Seguros e Estáveis para Windows + RTX 4070
+    # 5. Argumentos de Treino Seguros e Estáveis para Windows + RTX 4070 (+200 passos)
+    STEPS_TO_RUN = 200
     training_args = TrainingArguments(
         output_dir=OUTPUT_DIR,
         per_device_train_batch_size=1,
         gradient_accumulation_steps=16,
-        learning_rate=1.5e-4,
+        learning_rate=8e-5,
         lr_scheduler_type="cosine",
-        warmup_steps=30,
+        warmup_steps=15,
         weight_decay=0.01,
-        max_steps=1000,
+        max_steps=STEPS_TO_RUN,
         logging_steps=10,
         logging_first_step=True,
         eval_strategy="steps",
         eval_steps=50,
         save_strategy="steps",
         save_steps=50,
-        save_total_limit=2,
+        save_total_limit=3,
         bf16=True,
         optim="paged_adamw_8bit",
         report_to="none",
@@ -171,23 +190,22 @@ def main():
         data_collator=data_collator,
     )
 
-    # Identificar checkpoint mais recente para continuar o refinamento
-    resume_checkpoint = None
-    for step in [700, 600, 500, 400, 300, 200, 100]:
-        ckpt = os.path.join(OUTPUT_DIR, f"checkpoint-{step}")
-        if os.path.exists(ckpt):
-            resume_checkpoint = ckpt
-            print(f"\n[🔄 Retomando Treinamento] Checkpoint mais recente encontrado: {resume_checkpoint}")
-            break
-
     print("\n" + "=" * 60)
-    print("Iniciando refinamento QLoRA na RTX 4070 até o passo 1000...")
+    print(f"Iniciando refinamento QLoRA (+{STEPS_TO_RUN} passos) na RTX 4070...")
+    print(f"Base de partida: Passo {latest_step} -> Meta acumulada: Passo {latest_step + STEPS_TO_RUN}")
     print("=" * 60)
 
-    trainer.train(resume_from_checkpoint=resume_checkpoint)
+    trainer.train()
 
-    print("\nTreinamento concluído com sucesso!")
-    print(f"Salvando adaptadores LoRA em: {OUTPUT_DIR}")
+    # Salvar checkpoint cumulativo correspondente (ex: checkpoint-1200)
+    cumulative_step = latest_step + STEPS_TO_RUN
+    final_checkpoint_dir = os.path.join(OUTPUT_DIR, f"checkpoint-{cumulative_step}")
+    os.makedirs(final_checkpoint_dir, exist_ok=True)
+    model.save_pretrained(final_checkpoint_dir)
+    tokenizer.save_pretrained(final_checkpoint_dir)
+
+    print(f"\nTreinamento de +{STEPS_TO_RUN} passos concluído com sucesso!")
+    print(f"Salvando adaptadores LoRA finais em: {OUTPUT_DIR}")
     model.save_pretrained(OUTPUT_DIR)
     tokenizer.save_pretrained(OUTPUT_DIR)
     print("Adaptadores salvos com sucesso!")
