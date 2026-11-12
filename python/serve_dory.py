@@ -2048,9 +2048,9 @@ Como posso te ajudar agora?</div>
                 }
 
                 // Sanitização final de tokens especiais
-                assistantObj.content = assistantObj.content.replace(/<\|im_end\|>/g, '').replace(/<\|im_start\|>/g, '').replace(/<s>/g, '').trim();
+                assistantObj.content = assistantObj.content.replace(/<\|im_end\|>/g, '').replace(/<\|im_start\|>/g, '').replace(/<s>/g, '').replace(/<\/?parameter>/g, '').replace(/&lt;\/?parameter&gt;/g, '').trim();
                 if (assistantObj.thought) {
-                    assistantObj.thought = assistantObj.thought.replace(/<\|im_end\|>/g, '').replace(/<\|im_start\|>/g, '').replace(/<s>/g, '').trim();
+                    assistantObj.thought = assistantObj.thought.replace(/<\|im_end\|>/g, '').replace(/<\|im_start\|>/g, '').replace(/<s>/g, '').replace(/<\/?parameter>/g, '').replace(/&lt;\/?parameter&gt;/g, '').trim();
                 }
 
                 textSpan.innerHTML = formatMarkdown(assistantObj.content);
@@ -2058,10 +2058,22 @@ Como posso te ajudar agora?</div>
                 if (thinkContainer) {
                     thinkContainer.open = false; // fecha o think ao terminar para visual limpo
                     thinkContainer.querySelector('summary').innerText = '💭 Raciocínio do Agente';
+                    const thinkContentEl = thinkContainer.querySelector('.think-content');
+                    if (thinkContentEl) {
+                        thinkContentEl.innerText = assistantObj.thought;
+                    }
                 }
 
-                // Adicionar botões de ação (Copiar e Voz)
-                addMessageFooter(contentBox, assistantObj.content);
+                // Se o conteúdo principal estiver vazio, remove o balão vazio do DOM
+                const liveReplyEl = contentBox.querySelector('#live-reply');
+                if (liveReplyEl && !assistantObj.content.trim()) {
+                    liveReplyEl.remove();
+                }
+
+                // Adicionar botões de ação (Copiar e Voz) se houver conteúdo
+                if (assistantObj.content.trim()) {
+                    addMessageFooter(contentBox, assistantObj.content);
+                }
 
                 cur.messages.push(assistantObj);
                 await saveCurrentChat();
@@ -2707,7 +2719,7 @@ async def chat_stream_endpoint(req: ChatRequest):
 
                 if in_think:
                     think_tokens_count += 1
-                    clean_th = chunk.replace("<|im_end|>", "").replace("<|im_start|>", "")
+                    clean_th = chunk.replace("<|im_end|>", "").replace("<|im_start|>", "").replace("<s>", "").replace("<parameter>", "").replace("</parameter>", "")
                     if clean_th:
                         yield f"data: {json.dumps({'type': 'think_token', 'token': clean_th})}\n\n"
                     if reasoning_budget_enabled and think_tokens_count >= reasoning_budget:
@@ -2731,7 +2743,7 @@ async def chat_stream_endpoint(req: ChatRequest):
                 if in_tool:
                     tool_buffer += chunk
                 else:
-                    clean_c = chunk.replace("<|im_end|>", "").replace("<|im_start|>", "").replace("<s>", "")
+                    clean_c = chunk.replace("<|im_end|>", "").replace("<|im_start|>", "").replace("<s>", "").replace("<parameter>", "").replace("</parameter>", "")
                     if clean_c:
                         yield f"data: {json.dumps({'type': 'token', 'token': clean_c})}\n\n"
 

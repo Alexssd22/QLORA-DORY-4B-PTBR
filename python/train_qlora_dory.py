@@ -37,12 +37,13 @@ configuration_utils.PreTrainedConfig.validate_layer_type = lambda self: None
 
 MODEL_ID = "nvidia/NVIDIA-Nemotron-Labs-Dory1.0-4B-BF16"
 OUTPUT_DIR = "models/dory-lora-ptbr"
-TRAIN_DATA = "data/final/train_targeted_100.jsonl"
-EVAL_DATA = "data/final/eval_targeted_100.jsonl"
+TRAIN_DATA = "data/final/train_girias_balanced.jsonl"
+EVAL_DATA = "data/final/eval_girias_balanced.jsonl"
+STEPS_TO_RUN = 25
 
 def main():
     print("=" * 65)
-    print("Iniciando Treinamento QLoRA do Dory 1.0 4B - Retomada Focada")
+    print("Iniciando Treinamento QLoRA do Dory 1.0 4B - Gírias da Internet (25 Passos)")
     print("GPU:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else "Nenhuma")
     print(f"Dataset de Treino: {TRAIN_DATA}")
     print("=" * 65)
@@ -86,7 +87,7 @@ def main():
     print(f"Modelo carregado na GPU! VRAM alocada: {torch.cuda.memory_allocated() / (1024**3):.2f} GB")
     model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=False)
 
-    # 3. Identificar checkpoint existente mais recente (ex: checkpoint-1225)
+    # 3. Identificar checkpoint existente mais recente (ex: checkpoint-1300)
     ckpts = glob.glob(os.path.join(OUTPUT_DIR, "checkpoint-*"))
     latest_ckpt = None
     latest_step = 0
@@ -99,15 +100,8 @@ def main():
         except ValueError:
             pass
 
-    TARGET_CUMULATIVE_STEP = 1300
-    if latest_step >= TARGET_CUMULATIVE_STEP:
-        STEPS_TO_RUN = 100
-    else:
-        STEPS_TO_RUN = TARGET_CUMULATIVE_STEP - latest_step
-
     if latest_ckpt:
         print(f"\n[🔄 Carregando Adaptadores Pré-treinados] Checkpoint encontrado: {latest_ckpt} (passo {latest_step})")
-        print(f"Passos restantes para meta acumulada ({TARGET_CUMULATIVE_STEP}): {STEPS_TO_RUN} passos")
         model = PeftModel.from_pretrained(model, latest_ckpt, is_trainable=True)
     else:
         print("\n[4/5] Injetando Adaptadores LoRA de Alta Precisão (Rank 32, Alpha 64)...")
@@ -124,8 +118,8 @@ def main():
 
     model.print_trainable_parameters()
 
-    # 4. Carregar Datasets e Aplicar Mascaramento de Prompt (Loss focado na Resposta com suporte a thinking)
-    print("\n[5/5] Preparando Datasets Especializados (Loss Masking -100 alinhado)...")
+    # 4. Carregar Datasets e Aplicar Mascaramento de Prompt (Loss focado na Resposta)
+    print("\n[5/5] Preparando Datasets Especializados em Gírias...")
     dataset = load_dataset("json", data_files={"train": TRAIN_DATA, "eval": EVAL_DATA})
 
     def tokenize_fn(batch):
@@ -151,7 +145,6 @@ def main():
             f_ids = f_tokens["input_ids"]
 
             p_len = min(len(p_ids), len(f_ids) - 1) if len(f_ids) > 1 else 0
-            # Mascarar o prompt com -100 para o loss ser calculado APENAS na resposta do assistente
             labels = [-100] * p_len + f_ids[p_len:]
 
             all_input_ids.append(f_ids)
@@ -166,21 +159,20 @@ def main():
     )
 
     # 5. Argumentos de Treino Ultrarrobustos e Estáveis para Windows
-    # Usar adamw_bnb_8bit (100% em VRAM GPU sem paginacao) e desativar eval sincrono pesado
     training_args = TrainingArguments(
         output_dir=OUTPUT_DIR,
         per_device_train_batch_size=1,
         gradient_accumulation_steps=16,
-        learning_rate=5e-5,
+        learning_rate=2e-5,
         lr_scheduler_type="cosine",
-        warmup_steps=8,
+        warmup_steps=3,
         weight_decay=0.01,
         max_steps=STEPS_TO_RUN,
         logging_steps=5,
         logging_first_step=True,
         eval_strategy="no",
         save_strategy="steps",
-        save_steps=25,
+        save_steps=STEPS_TO_RUN,
         save_total_limit=2,
         bf16=True,
         optim="adamw_bnb_8bit",
@@ -204,19 +196,19 @@ def main():
 
     cumulative_target = latest_step + STEPS_TO_RUN
     print("\n" + "=" * 65)
-    print(f"Iniciando refinamento QLoRA (+{STEPS_TO_RUN} passos) na RTX 4070...")
+    print(f"Iniciando aprendizado de gírias ({STEPS_TO_RUN} passos) na RTX 4070...")
     print(f"Base de partida: Passo {latest_step} -> Meta acumulada: Passo {cumulative_target}")
     print("=" * 65)
 
     trainer.train()
 
-    # Salvar checkpoint cumulativo correspondente (checkpoint-1300)
+    # Salvar checkpoint cumulativo correspondente (checkpoint-1325)
     final_checkpoint_dir = os.path.join(OUTPUT_DIR, f"checkpoint-{cumulative_target}")
     os.makedirs(final_checkpoint_dir, exist_ok=True)
     model.save_pretrained(final_checkpoint_dir)
     tokenizer.save_pretrained(final_checkpoint_dir)
 
-    print(f"\nTreinamento de +{STEPS_TO_RUN} passos concluído com sucesso!")
+    print(f"\nTreinamento de {STEPS_TO_RUN} passos concluído com sucesso!")
     print(f"Salvando adaptadores LoRA finais em: {OUTPUT_DIR}")
     model.save_pretrained(OUTPUT_DIR)
     tokenizer.save_pretrained(OUTPUT_DIR)
