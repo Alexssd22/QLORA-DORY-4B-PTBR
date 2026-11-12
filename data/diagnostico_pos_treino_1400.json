@@ -1,0 +1,122 @@
+[
+  {
+    "id": "math_1",
+    "area": "1. Raciocinio Logico e Matematica",
+    "prompt": "Se uma pizza tem 8 pedacos, Joao comeu 3 pedacos e Maria comeu 2 pedacos, que fracao da pizza sobrou? Explique o calculo passo a passo.",
+    "response": "Joao: 1/8 - (8 - 3) / 5) / 5 pedacos de pizza / 8 = 10 / 1 / 1/8",
+    "expected": "8 - (3+2) = 3 pedacos restantes e a fracao 3/8.",
+    "gen_tokens": 41,
+    "tok_per_sec": 3.4,
+    "rep_ratio": 0.286
+  },
+  {
+    "id": "math_2",
+    "area": "1. Raciocinio Logico e Matematica",
+    "prompt": "Tres irmaos tem idades consecutivas cuja soma e 45 anos. Qual e a idade de cada um deles (mais novo, do meio e mais velho)? Mostre a conta.",
+    "response": "O meio termo é o dobro da idade do menor?",
+    "expected": "x + (x+1) + (x+2) = 45 => 3x = 42 => x = 14. Idades: 14, 15 e 16 anos.",
+    "gen_tokens": 12,
+    "tok_per_sec": 6.71,
+    "rep_ratio": 0.0
+  },
+  {
+    "id": "gram_1",
+    "area": "2. Gramatica e Concordancia Culta",
+    "prompt": "Corrija a frase a seguir e explique a regra gramatical envolvida: 'Haviam muitas pessoas na sala que nao sabia o que fazer.'",
+    "response": "**Frase corrigida:** *\"Na sala, muitas pessoas sabiam o que fazer.\"*\n\n** nao saberiam que fazer.\"* (fazeram o fazer.\")\n\n** \"que\" para \"nao sabiam que fazer.\"**\n\n**nao que fazeram o verbo *saberca:***\nO verbo 'sabiu nao verbo saber' no singular* é uma conjete da pessoa plural concordar a terceira pessoa simples com o verbo de 3ª pessoa singular* **o verbo auxiliar do verbo auxiliar do verbo 'haver* concordar* deve concordar* com o verbo auxiliar de primeira pessoa singular e concordar com o verbo auxiliar *ser*, pois está sempre deve concordar com a pessoa singular com o verbo principal.*",
+    "expected": "Havia muitas pessoas na sala que nao sabiam o que fazer.",
+    "gen_tokens": 155,
+    "tok_per_sec": 6.27,
+    "rep_ratio": 0.433
+  },
+  {
+    "id": "gram_2",
+    "area": "2. Gramatica e Concordancia Culta",
+    "prompt": "Qual e a forma correta: 'Fazem dois anos' ou 'Faz dois anos'? Explique sucintamente a regra.",
+    "response": "A forma correta é **faz**.",
+    "expected": "'Faz dois anos' (verbo fazer indicando tempo decorrido e impessoal).",
+    "gen_tokens": 10,
+    "tok_per_sec": 6.54,
+    "rep_ratio": 0.0
+  },
+  {
+    "id": "agent_1",
+    "area": "3. Acoes de Agente e Tags Quebradas",
+    "prompt": "Escreva um poema curto sobre o amanhecer no campo. Atencao: apenas responda com o poema em versos, nao chame ferramentas nem invente tags de sistema.",
+    "response": "O sol nascer do sol brilho e brilhante desvelha dourado brilha na calma e as manhãe suave,\nO canto dos raio espetorroza no horizontecador da vida de novo dia,\nO silencio da aurora desbordo se levanta e leve acorde a sereno sereno e suave,\nO orvalho nao acorda, o horizontezando o silencio tranquila,\nO solho doce da nova palmeleite o verde acenhor das folhantezante acorde mais gentilmente,\nO silêncio amanhãntes de um horizonteo que acende como fogo suave,\nO mundo desperta-se o céu acorda o dia wispante,\nO sol acordeia o arco-verde da floresta o horizonte radiante brilha o soluzo do sol.\nA manhã nao torna os campos acordar, o horizonte acorda o novo dia ao verde do sol na clarejo do novo dia,\nO universo espalvoegreia a",
+    "expected": "Poema limpo, sem emitir <parameter>, <tool_call> ou tags quebradas.",
+    "gen_tokens": 220,
+    "tok_per_sec": 5.73,
+    "rep_ratio": 0.359
+  },
+  {
+    "id": "agent_2",
+    "area": "3. Acoes de Agente e Tags Quebradas",
+    "prompt": "Como voce criaria um arquivo chamado notas.txt com o conteudo 'Lembrete importante' no seu papel de agente autonomo?",
+    "response": "Para criar o sistema operacao:",
+    "expected": "Estruturar criacao de arquivo coerente sem tags malformadas.",
+    "gen_tokens": 8,
+    "tok_per_sec": 6.44,
+    "rep_ratio": 0.0
+  },
+  {
+    "id": "instr_1",
+    "area": "4. Seguimento Estrito de Instrucoes",
+    "prompt": "Responda a seguinte pergunta em exatamente UMA UNICA PALAVRA, sem pontuacao: Qual e a capital do Brasil?",
+    "response": "Brasilia",
+    "expected": "Exatamente 'Brasilia'.",
+    "gen_tokens": 3,
+    "tok_per_sec": 6.14,
+    "rep_ratio": 0.0
+  },
+  {
+    "id": "instr_2",
+    "area": "4. Seguimento Estrito de Instrucoes",
+    "prompt": "Liste exatamente 3 vantagens de praticar exercicios fisicos regularmente. Use uma lista numerada (1, 2, 3), sendo cada item uma frase curta.",
+    "response": "- Melhora a melhorar a aumentar a saude fisica e mental; melhante a condiciona a postura muscular; fortaleça a disposica cardio cardiovascular; aumenta o humor; ajuda no sono; reduz o peso excesso.",
+    "expected": "Exatamente 3 itens numerados (1, 2, 3), frases curtas e completas.",
+    "gen_tokens": 52,
+    "tok_per_sec": 6.42,
+    "rep_ratio": 0.188
+  },
+  {
+    "id": "fluency_1",
+    "area": "5. Fluencia e Didatica",
+    "prompt": "Explique de forma didatica para um iniciante: qual a diferenca principal entre memoria RAM e Armazenamento (SSD/HD)?",
+    "response": "A **RAM (Memoria** e o **Armae** e **Hard Disk (Disk):\n\n- **Memoria de A **Memoria:** E como a **Memoria Ram (Random Access Memory (memoria de Acessorada Acessoa Random Access Memory), ou Memoria Aleatoria aleatoria de Acesso Em Casula Rápura Largemorte In-Memaria em Acessariosa):\n\nEstatica Rapida** ar Livre**, e Volatribuida):\n- Acessariosi):\n\n- E Volatrivosa de Acesso Rapido Immediado ao Acessarbitima de Acessa Rapida de Acessa em Tempo).\n- Tem Localizada em Tempo:** E **Volatual e Volatvel e Ultra-Rasa, Veloculada):** E interna rapidissima, rapidez extrema, ultra- Onde:** Guarda acelocuante no **Memoria e curta duradouro:**\n- Acesso imediao com alta velocidade extremamente.**\n- e Super rápida e temporaria instantane",
+    "expected": "Explicacao clara e fluida (RAM e volatil; SSD/HD permanente).",
+    "gen_tokens": 220,
+    "tok_per_sec": 5.95,
+    "rep_ratio": 0.271
+  },
+  {
+    "id": "fluency_2",
+    "area": "5. Fluencia e Didatica",
+    "prompt": "O que e uma API e como ela funciona no dia a dia da internet? De uma analogia simples.",
+    "response": "**API (Application Programming Interface) é o que significa Application Programming Interface), e na pratica, nao mais simples: **Application Programming Interface**, e e e serve de lingua franca:** É a ponte que permite que servem como um pontuador entre dois aplicativos e outros sistemas diferentes programas se comunicam uns com os serviços para entenderem entre si no dia-a-dois.**\n\n### **se no dia a dia-a-ao. No dia a dia-a-dia em dia a dia-a-dia, imagine-se como um ponte que serve de vida real.** Fazer:**\n\nImagine uma **um restaurante do dia a dia-dia e é como um menu de comida ou uma garcomando:\n\n-dia:\n-uma recepaca entre **menu de restaurante que fica entre o seu celular do fast food delivery que fazenda e o cliente.\n\n### Como a sua conta digital.**\nEla funciona:\n-caffeite do restaurante e o Restaurante e o seu restaurante em um pedidos com o restaurante e o seu restaurante:**\n-que no supermercado:\n1. Quando voce (",
+    "expected": "Analogia do garcom ou mensageiro, texto natural e coeso.",
+    "gen_tokens": 220,
+    "tok_per_sec": 5.98,
+    "rep_ratio": 0.372
+  },
+  {
+    "id": "slang_1",
+    "area": "6. Girias e Cultura Popular",
+    "prompt": "O que significa a expressão 'dar um rolê' e 'dar migué' no cotidiano brasileiro?",
+    "response": "Na cultura brasileira, dizer **\"dar um miga no cotidiano\" é dar uma vida\" na briga ou \"dar uma vida\" significa provocar uma piada\", provocar uma birraquecaça, espetrogaço, causar uma brincar deboia ou fazer uma farrejozedo, provocar umasquer uma brincade, tecer com alguém. Significa.",
+    "expected": "Rolê = passear/sair; Migué = dar desculpa esfarrapada/fingir.",
+    "gen_tokens": 84,
+    "tok_per_sec": 6.45,
+    "rep_ratio": 0.233
+  },
+  {
+    "id": "slang_2",
+    "area": "6. Girias e Cultura Popular",
+    "prompt": "Se alguém disser 'o trampo deu ruim e fiquei na mão', o que aconteceu?",
+    "response": "Significa que a pessoa teve uma desam uma grande sorte ou teve muita sorte.",
+    "expected": "O trabalho deu errado/falhou e a pessoa ficou desamparada/sem suporte.",
+    "gen_tokens": 18,
+    "tok_per_sec": 6.43,
+    "rep_ratio": 0.143
+  }
+]
