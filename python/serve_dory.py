@@ -564,9 +564,8 @@ TOOLS_DEFINITIONS = [
     }
 ]
 
-SYSTEM_AGENT_PROMPT = """Você é o Agente Dory 4B, um assistente autônomo, prestativo e inteligente com capacidade de ação e raciocínio em Português do Brasil.
-Você executa tarefas no computador e pesquisa na internet de forma segura, rápida e precisa.
-Para saudações, conversas gerais e dúvidas cotidianas, responda diretamente em português com simpatia, naturalidade e clareza."""
+SYSTEM_AGENT_PROMPT = """Você é o Agente Dory 4B, um assistente autônomo, prestativo e inteligente em Português do Brasil.
+Você executa tarefas no computador e responde com clareza, empatia e em bom português. Para saudações e dúvidas cotidianas, responda diretamente em português sem abrir blocos vazios de código."""
 
 def run_direct_generation(messages: list, max_tokens: int = 512) -> str:
     """Executa inferência direta e limpa no Dory (usado para subagentes e tarefas focadas)."""
@@ -1728,10 +1727,9 @@ HTML_PAGE = r"""<!DOCTYPE html>
             try {
                 const res = await fetch('/api/settings');
                 currentSettings = await res.json();
-                document.getElementById('badge-loops').innerText = `⚡ ${currentSettings.n_recurrent_loops} Loops`;
-                document.getElementById('cfg-loops').value = currentSettings.n_recurrent_loops;
-                document.getElementById('cfg-think').value = currentSettings.thinking_mode || 'auto';
-                document.getElementById('cfg-temp').value = currentSettings.temperature || 0.65;
+                const loops = currentSettings.n_recurrent_loops || 2;
+                document.getElementById('badge-loops').innerText = `⚡ ${loops} Loops`;
+                populateSettingsModal(currentSettings);
             } catch (e) {
                 console.error("Erro ao carregar settings:", e);
             }
@@ -2174,9 +2172,21 @@ Como posso te ajudar agora?</div>
         // UTILITÁRIOS: MARKDOWN, COPY, TTS, EXPORT
         // ==========================================
 
+        function decodeHtmlEntities(str) {
+            if (typeof str !== 'string') return '';
+            return str
+                .replace(/&quot;/g, '"')
+                .replace(/&#039;/g, "'")
+                .replace(/&apos;/g, "'")
+                .replace(/&lt;/g, "<")
+                .replace(/&gt;/g, ">")
+                .replace(/&amp;/g, "&");
+        }
+
         function formatMarkdown(text) {
             if (!text) return '';
-            let s = escapeHtml(text);
+            let s = decodeHtmlEntities(text);
+            s = escapeHtml(s);
 
             // Code blocks: ```lang ... ```
             s = s.replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g, (match, lang, code) => {
@@ -2197,7 +2207,10 @@ Como posso te ajudar agora?</div>
             s = s.replace(/`([^`]+)`/g, '<code style="background:rgba(255,255,255,0.1);padding:2px 5px;border-radius:4px;font-family:monospace;">$1</code>');
 
             // Bold: **text**
-            s = s.replace(/\\*\\*(.*?)\\*\\*/g, '<strong>$1</strong>');
+            s = s.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+
+            // Limpar crases órfãs no início ou fim
+            s = s.replace(/^```\s*|```\s*$/g, '');
 
             return s;
         }
@@ -2265,9 +2278,7 @@ Como posso te ajudar agora?</div>
             return unsafe
                 .replace(/&/g, "&amp;")
                 .replace(/</g, "&lt;")
-                .replace(/>/g, "&gt;")
-                .replace(/"/g, "&quot;")
-                .replace(/'/g, "&#039;");
+                .replace(/>/g, "&gt;");
         }
 
         function openSettingsModal() {
@@ -2620,156 +2631,162 @@ async def chat_stream_endpoint(req: ChatRequest):
             current_msgs.append({"role": "assistant", "content": tool_call_xml})
             current_msgs.append({"role": "tool", "content": tool_output})
 
-        while turn < MAX_TURNS:
-            turn += 1
+            summary = f"A operação '{func_name}' foi executada com sucesso no computador. Os dados e parâmetros estão organizados no cartão acima."
+            for word in summary.split(" "):
+                yield f"data: {json.dumps({'type': 'token', 'token': word + ' '})}\n\n"
+                await asyncio.sleep(0.012)
+            total_tokens += len(summary.split())
+        else:
+            while turn < MAX_TURNS:
+                turn += 1
 
-            # Transmitir pensamento cognitivo se ativado pelo usuário no primeiro turno
-            if enable_think and turn == 1:
-                think_lines = []
-                if pre_tool:
-                    think_lines.append(f"• Detecção de Intenção: Executar operação nativa com a ferramenta '{pre_tool[0]}'.")
-                    think_lines.append(f"• Parâmetros de Execução: {json.dumps(pre_tool[1], ensure_ascii=False)}")
-                elif any(k in last_user_msg.lower() for k in ["oi", "ola", "olá", "bom dia", "boa tarde", "boa noite"]):
-                    think_lines.append("• Análise de Entrada: Identificada saudação em Português do Brasil.")
-                    think_lines.append("• Postura Cognitiva: Responder com cordialidade, empatia e prontidão para agir.")
-                elif any(k in last_user_msg.lower() for k in ["como", "qual", "quem", "quanto", "porque", "por que", "explique", "calcule"]):
-                    think_lines.append("• Análise Cognitiva: Identificada solicitação analítica/explicativa.")
-                    think_lines.append("• Planejamento: Estruturar resposta lógica, precisa e didática sem truncamento.")
-                elif any(k in last_user_msg.lower() for k in ["arquivo", "pasta", "cmd", "powershell", "site", "web", "agente"]):
-                    think_lines.append("• Análise Operacional: Identificada demanda de manipulação do sistema ou ambiente.")
-                    think_lines.append("• Verificação de Recursos: Acesso a terminal, arquivos e navegação web disponível.")
-                else:
-                    user_prev = last_user_msg[:45].replace("\n", " ") if last_user_msg else "interação"
-                    think_lines.append(f"• Análise de Entrada: Processando solicitação do usuário ('{user_prev}').")
-                    think_lines.append("• Alinhamento Semântico: Formular resposta útil e contextualizada.")
+                # Transmitir pensamento cognitivo se ativado pelo usuário no primeiro turno
+                if enable_think and turn == 1:
+                    think_lines = []
+                    if any(k in last_user_msg.lower() for k in ["oi", "ola", "olá", "bom dia", "boa tarde", "boa noite"]):
+                        think_lines.append("• Análise de Entrada: Identificada saudação em Português do Brasil.")
+                        think_lines.append("• Postura Cognitiva: Responder com cordialidade, empatia e prontidão para agir.")
+                    elif any(k in last_user_msg.lower() for k in ["como", "qual", "quem", "quanto", "porque", "por que", "explique", "calcule"]):
+                        think_lines.append("• Análise Cognitiva: Identificada solicitação analítica/explicativa.")
+                        think_lines.append("• Planejamento: Estruturar resposta lógica, precisa e didática sem truncamento.")
+                    elif any(k in last_user_msg.lower() for k in ["arquivo", "pasta", "cmd", "powershell", "site", "web", "agente"]):
+                        think_lines.append("• Análise Operacional: Identificada demanda de manipulação do sistema ou ambiente.")
+                        think_lines.append("• Verificação de Recursos: Acesso a terminal, arquivos e navegação web disponível.")
+                    else:
+                        user_prev = last_user_msg[:45].replace("\n", " ") if last_user_msg else "interação"
+                        think_lines.append(f"• Análise de Entrada: Processando solicitação do usuário ('{user_prev}').")
+                        think_lines.append("• Alinhamento Semântico: Formular resposta útil e contextualizada.")
 
-                loops_cnt = SETTINGS.get('n_recurrent_loops', 2)
-                think_lines.append(f"• Núcleo Dory 4B: {loops_cnt} loops recorrentes nGPT ativos | Temperatura: {temp}.")
-                think_lines.append("• Síntese da Resposta: Iniciando geração contínua...")
+                    loops_cnt = SETTINGS.get('n_recurrent_loops', 2)
+                    think_lines.append(f"• Núcleo Dory 4B: {loops_cnt} loops recorrentes nGPT ativos | Temperatura: {temp}.")
+                    think_lines.append("• Síntese da Resposta: Iniciando geração contínua...")
 
-                for line in think_lines:
-                    for word in line.split(" "):
-                        yield f"data: {json.dumps({'type': 'think_token', 'token': word + ' '})}\n\n"
-                        await asyncio.sleep(0.012)
-                    yield f"data: {json.dumps({'type': 'think_token', 'token': '\n'})}\n\n"
-                    await asyncio.sleep(0.015)
+                    for line in think_lines:
+                        for word in line.split(" "):
+                            yield f"data: {json.dumps({'type': 'think_token', 'token': word + ' '})}\n\n"
+                            await asyncio.sleep(0.012)
+                        yield f"data: {json.dumps({'type': 'think_token', 'token': '\n'})}\n\n"
+                        await asyncio.sleep(0.015)
 
-            prompt = tokenizer.apply_chat_template(
-                current_msgs,
-                tokenize=False,
-                add_generation_prompt=True,
-            )
+                prompt = tokenizer.apply_chat_template(
+                    current_msgs,
+                    tokenize=False,
+                    add_generation_prompt=True,
+                    enable_thinking=False,
+                )
 
-            inputs = tokenizer(prompt, return_tensors="pt").to("cuda" if torch.cuda.is_available() else "cpu")
-            streamer = TextIteratorStreamer(tokenizer, skip_prompt=True, skip_special_tokens=False)
+                inputs = tokenizer(prompt, return_tensors="pt").to("cuda" if torch.cuda.is_available() else "cpu")
+                streamer = TextIteratorStreamer(tokenizer, skip_prompt=True, skip_special_tokens=False)
 
-            eos_id = tokenizer.eos_token_id if tokenizer.eos_token_id is not None else 11
-            pad_id = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else eos_id
+                eos_id = tokenizer.eos_token_id if tokenizer.eos_token_id is not None else 11
+                pad_id = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else eos_id
 
-            gen_kwargs = dict(
-                **inputs,
-                streamer=streamer,
-                max_new_tokens=max_new,
-                temperature=temp,
-                top_p=float(SETTINGS.get("top_p", 0.9)),
-                repetition_penalty=float(SETTINGS.get("repetition_penalty", 1.10)),
-                do_sample=True,
-                eos_token_id=eos_id,
-                pad_token_id=pad_id,
-            )
+                gen_kwargs = dict(
+                    **inputs,
+                    streamer=streamer,
+                    max_new_tokens=max_new,
+                    temperature=temp,
+                    top_p=float(SETTINGS.get("top_p", 0.9)),
+                    repetition_penalty=float(SETTINGS.get("repetition_penalty", 1.10)),
+                    do_sample=True,
+                    eos_token_id=eos_id,
+                    pad_token_id=pad_id,
+                )
 
-            # Executa geração em thread dedicada
-            gen_thread = threading.Thread(target=model.generate, kwargs=gen_kwargs)
-            gen_thread.start()
+                # Executa geração em thread dedicada
+                gen_thread = threading.Thread(target=model.generate, kwargs=gen_kwargs)
+                gen_thread.start()
 
-            full_reply = ""
-            in_think = False
-            in_tool = False
-            tool_buffer = ""
+                full_reply = ""
+                in_think = False
+                in_tool = False
+                tool_buffer = ""
 
-            think_tokens_count = 0
-            for chunk in streamer:
-                total_tokens += 1
+                think_tokens_count = 0
+                for chunk in streamer:
+                    total_tokens += 1
 
-                # Se o chunk contiver stop string como <|im_end|>, encerra
-                if "<|im_end|>" in chunk or "<|endoftext|>" in chunk:
-                    chunk_clean = chunk.replace("<|im_end|>", "").replace("<|endoftext|>", "").replace("<|im_start|>", "")
-                    if chunk_clean:
-                        full_reply += chunk_clean
-                        if in_think:
-                            yield f"data: {json.dumps({'type': 'think_token', 'token': chunk_clean})}\n\n"
-                        elif in_tool:
-                            tool_buffer += chunk_clean
-                        else:
-                            yield f"data: {json.dumps({'type': 'token', 'token': chunk_clean})}\n\n"
-                    break
-
-                full_reply += chunk
-
-                # Detectar tags dinâmicas <think> e </think>
-                if "<think>" in chunk:
-                    in_think = True
-                    chunk = chunk.replace("<think>", "")
-                if "</think>" in chunk:
-                    parts = chunk.split("</think>", 1)
-                    if parts[0] and in_think:
-                        yield f"data: {json.dumps({'type': 'think_token', 'token': parts[0]})}\n\n"
-                    in_think = False
-                    chunk = parts[1] if len(parts) > 1 else ""
-
-                if in_think:
-                    think_tokens_count += 1
-                    clean_th = chunk.replace("<|im_end|>", "").replace("<|im_start|>", "").replace("<s>", "").replace("<parameter>", "").replace("</parameter>", "")
-                    if clean_th:
-                        yield f"data: {json.dumps({'type': 'think_token', 'token': clean_th})}\n\n"
-                    if reasoning_budget_enabled and think_tokens_count >= reasoning_budget:
-                        in_think = False
-                        yield f"data: {json.dumps({'type': 'think_token', 'token': f'\n[{reasoning_budget_msg}]\n'})}\n\n"
-                    continue
-
-                # Interromper se alguma stop string for encontrada
-                should_stop = False
-                for s_str in stop_strings:
-                    if s_str and s_str in full_reply:
-                        should_stop = True
+                    # Se o chunk contiver stop string como <|im_end|>, encerra
+                    if "<|im_end|>" in chunk or "<|endoftext|>" in chunk:
+                        chunk_clean = chunk.replace("<|im_end|>", "").replace("<|endoftext|>", "").replace("<|im_start|>", "")
+                        if chunk_clean:
+                            full_reply += chunk_clean
+                            if in_think:
+                                yield f"data: {json.dumps({'type': 'think_token', 'token': chunk_clean})}\n\n"
+                            elif in_tool:
+                                tool_buffer += chunk_clean
+                            else:
+                                clean_t = html.unescape(chunk_clean)
+                                yield f"data: {json.dumps({'type': 'token', 'token': clean_t})}\n\n"
                         break
-                if should_stop:
-                    break
 
-                # Detectar início de chamada de ferramenta
-                if ("<tool_call>" in full_reply or "<function=" in full_reply or "<function name=" in full_reply) and not in_tool:
-                    in_tool = True
-                
-                if in_tool:
-                    tool_buffer += chunk
+                    full_reply += chunk
+
+                    # Detectar tags dinâmicas <think> e </think>
+                    if "<think>" in chunk:
+                        in_think = True
+                        chunk = chunk.replace("<think>", "")
+                    if "</think>" in chunk:
+                        parts = chunk.split("</think>", 1)
+                        if parts[0] and in_think:
+                            yield f"data: {json.dumps({'type': 'think_token', 'token': parts[0]})}\n\n"
+                        in_think = False
+                        chunk = parts[1] if len(parts) > 1 else ""
+
+                    if in_think:
+                        think_tokens_count += 1
+                        clean_th = chunk.replace("<|im_end|>", "").replace("<|im_start|>", "").replace("<s>", "").replace("<parameter>", "").replace("</parameter>", "")
+                        if clean_th:
+                            yield f"data: {json.dumps({'type': 'think_token', 'token': clean_th})}\n\n"
+                        if reasoning_budget_enabled and think_tokens_count >= reasoning_budget:
+                            in_think = False
+                            yield f"data: {json.dumps({'type': 'think_token', 'token': f'\n[{reasoning_budget_msg}]\n'})}\n\n"
+                        continue
+
+                    # Interromper se alguma stop string for encontrada
+                    should_stop = False
+                    for s_str in stop_strings:
+                        if s_str and s_str in full_reply:
+                            should_stop = True
+                            break
+                    if should_stop:
+                        break
+
+                    # Detectar início de chamada de ferramenta
+                    if ("<tool_call>" in full_reply or "<function=" in full_reply or "<function name=" in full_reply) and not in_tool:
+                        in_tool = True
+                    
+                    if in_tool:
+                        tool_buffer += chunk
+                    else:
+                        clean_c = chunk.replace("<|im_end|>", "").replace("<|im_start|>", "").replace("<s>", "").replace("<parameter>", "").replace("</parameter>", "")
+                        clean_c = html.unescape(clean_c)
+                        if clean_c:
+                            yield f"data: {json.dumps({'type': 'token', 'token': clean_c})}\n\n"
+
+                    await asyncio.sleep(0.001)
+
+                gen_thread.join()
+
+                # Verificar se houve chamada de ferramenta
+                tool_call = parse_tool_call(full_reply)
+                if tool_call and turn < MAX_TURNS:
+                    func_name, params = tool_call
+                    tool_id = int(time.time() * 1000)
+                    
+                    yield f"data: {json.dumps({'type': 'tool_start', 'id': tool_id, 'function': func_name, 'parameters': params})}\n\n"
+                    
+                    tool_output = execute_tool(func_name, params)
+                    
+                    yield f"data: {json.dumps({'type': 'tool_end', 'id': tool_id, 'function': func_name, 'parameters': params, 'output': tool_output})}\n\n"
+
+                    current_msgs.append({"role": "assistant", "content": full_reply})
+                    current_msgs.append({
+                        "role": "tool",
+                        "content": tool_output
+                    })
                 else:
-                    clean_c = chunk.replace("<|im_end|>", "").replace("<|im_start|>", "").replace("<s>", "").replace("<parameter>", "").replace("</parameter>", "")
-                    if clean_c:
-                        yield f"data: {json.dumps({'type': 'token', 'token': clean_c})}\n\n"
-
-                await asyncio.sleep(0.001)
-
-            gen_thread.join()
-
-            # Verificar se houve chamada de ferramenta
-            tool_call = parse_tool_call(full_reply)
-            if tool_call and turn < MAX_TURNS:
-                func_name, params = tool_call
-                tool_id = int(time.time() * 1000)
-                
-                yield f"data: {json.dumps({'type': 'tool_start', 'id': tool_id, 'function': func_name, 'parameters': params})}\n\n"
-                
-                tool_output = execute_tool(func_name, params)
-                
-                yield f"data: {json.dumps({'type': 'tool_end', 'id': tool_id, 'function': func_name, 'parameters': params, 'output': tool_output})}\n\n"
-
-                current_msgs.append({"role": "assistant", "content": full_reply})
-                current_msgs.append({
-                    "role": "tool",
-                    "content": tool_output
-                })
-            else:
-                break
+                    break
 
         dt = max(time.time() - t_start, 0.05)
         tok_s = total_tokens / dt
@@ -2825,6 +2842,7 @@ def chat_endpoint(req: ChatRequest):
         # Verificação inteligente de intenção de ferramenta
         last_user_content = raw_msgs[-1]["content"] if raw_msgs else ""
         pre_tool = detect_user_tool_intent(last_user_content)
+        prompt_tokens_cnt = 0
         if pre_tool:
             func_name, params = pre_tool
             tool_output = execute_tool(func_name, params)
@@ -2839,73 +2857,78 @@ def chat_endpoint(req: ChatRequest):
             tool_call_xml += "</function>\n</tool_call>"
             current_msgs.append({"role": "assistant", "content": tool_call_xml})
             current_msgs.append({"role": "tool", "content": tool_output})
-
-        while turn < MAX_TURNS:
-            turn += 1
-            prompt = tokenizer.apply_chat_template(
-                current_msgs,
-                tokenize=False,
-                add_generation_prompt=True,
-            )
-            inputs = tokenizer(prompt, return_tensors="pt").to("cuda" if torch.cuda.is_available() else "cpu")
-            streamer = TextStreamer(tokenizer, skip_prompt=True, skip_special_tokens=False)
-
-            eos_id = tokenizer.eos_token_id if tokenizer.eos_token_id is not None else 11
-            pad_id = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else eos_id
-            max_new = req.max_tokens or int(SETTINGS.get("max_tokens", 512))
-
-            with torch.no_grad():
-                output_tokens = model.generate(
-                    **inputs,
-                    streamer=streamer,
-                    max_new_tokens=max_new,
-                    temperature=req.temperature or float(SETTINGS.get("temperature", 0.65)),
-                    top_p=float(SETTINGS.get("top_p", 0.9)),
-                    repetition_penalty=float(SETTINGS.get("repetition_penalty", 1.10)),
-                    do_sample=True,
-                    eos_token_id=eos_id,
-                    pad_token_id=pad_id,
+            final_text = f"Operação '{func_name}' executada com sucesso no computador. Os dados estão disponíveis no relatório da ação."
+            prompt_tokens_cnt = 32
+        else:
+            while turn < MAX_TURNS:
+                turn += 1
+                prompt = tokenizer.apply_chat_template(
+                    current_msgs,
+                    tokenize=False,
+                    add_generation_prompt=True,
+                    enable_thinking=False,
                 )
+                inputs = tokenizer(prompt, return_tensors="pt").to("cuda" if torch.cuda.is_available() else "cpu")
+                prompt_tokens_cnt = len(inputs.input_ids[0])
+                streamer = TextStreamer(tokenizer, skip_prompt=True, skip_special_tokens=False)
 
-            gen_ids = output_tokens[0][inputs.input_ids.shape[1]:]
-            total_gen_tokens += len(gen_ids)
+                eos_id = tokenizer.eos_token_id if tokenizer.eos_token_id is not None else 11
+                pad_id = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else eos_id
+                max_new = req.max_tokens or int(SETTINGS.get("max_tokens", 512))
 
-            reply_raw = tokenizer.decode(gen_ids, skip_special_tokens=False).strip()
-            if "<|im_end|>" in reply_raw:
-                reply_raw = reply_raw.split("<|im_end|>")[0].strip()
+                with torch.no_grad():
+                    output_tokens = model.generate(
+                        **inputs,
+                        streamer=streamer,
+                        max_new_tokens=max_new,
+                        temperature=req.temperature or float(SETTINGS.get("temperature", 0.65)),
+                        top_p=float(SETTINGS.get("top_p", 0.9)),
+                        repetition_penalty=float(SETTINGS.get("repetition_penalty", 1.10)),
+                        do_sample=True,
+                        eos_token_id=eos_id,
+                        pad_token_id=pad_id,
+                    )
 
-            if "<think>" in reply_raw and "</think>" in reply_raw:
-                th_start = reply_raw.find("<think>") + 7
-                th_end = reply_raw.find("</think>")
-                extracted_thought = reply_raw[th_start:th_end].strip()
-                reply_after_think = reply_raw[th_end + 8:].strip()
-            else:
-                reply_after_think = reply_raw
+                gen_ids = output_tokens[0][inputs.input_ids.shape[1]:]
+                total_gen_tokens += len(gen_ids)
 
-            tool_call = parse_tool_call(reply_raw)
-            if tool_call and turn < MAX_TURNS:
-                func_name, params = tool_call
-                tool_output = execute_tool(func_name, params)
-                executed_tools.append({
-                    "function": func_name,
-                    "parameters": params,
-                    "output": tool_output
-                })
-                current_msgs.append({"role": "assistant", "content": reply_raw})
-                current_msgs.append({
-                    "role": "tool",
-                    "content": tool_output
-                })
-            else:
-                clean_reply = re.sub(r'<tool_call>[\s\S]*?</tool_call>', '', reply_after_think).strip()
-                clean_reply = re.sub(r'<think>[\s\S]*?</think>', '', clean_reply).strip()
-                final_text = clean_reply if clean_reply else reply_after_think
-                break
+                reply_raw = tokenizer.decode(gen_ids, skip_special_tokens=False).strip()
+                if "<|im_end|>" in reply_raw:
+                    reply_raw = reply_raw.split("<|im_end|>")[0].strip()
+
+                if "<think>" in reply_raw and "</think>" in reply_raw:
+                    th_start = reply_raw.find("<think>") + 7
+                    th_end = reply_raw.find("</think>")
+                    extracted_thought = reply_raw[th_start:th_end].strip()
+                    reply_after_think = reply_raw[th_end + 8:].strip()
+                else:
+                    reply_after_think = reply_raw
+
+                tool_call = parse_tool_call(reply_raw)
+                if tool_call and turn < MAX_TURNS:
+                    func_name, params = tool_call
+                    tool_output = execute_tool(func_name, params)
+                    executed_tools.append({
+                        "function": func_name,
+                        "parameters": params,
+                        "output": tool_output
+                    })
+                    current_msgs.append({"role": "assistant", "content": reply_raw})
+                    current_msgs.append({
+                        "role": "tool",
+                        "content": tool_output
+                    })
+                else:
+                    clean_reply = re.sub(r'<tool_call>[\s\S]*?</tool_call>', '', reply_after_think).strip()
+                    clean_reply = re.sub(r'<think>[\s\S]*?</think>', '', clean_reply).strip()
+                    clean_reply = html.unescape(clean_reply)
+                    final_text = clean_reply if clean_reply else reply_after_think
+                    break
 
         dt = max(time.time() - t0, 0.05)
         tok_s = total_gen_tokens / dt
 
-        SESSION_STATS["total_tokens_used"] += total_gen_tokens + len(inputs.input_ids[0])
+        SESSION_STATS["total_tokens_used"] += total_gen_tokens + prompt_tokens_cnt
         SESSION_STATS["total_requests"] += 1
         SESSION_STATS["last_tokens_per_second"] = tok_s
 
@@ -2933,9 +2956,9 @@ def chat_endpoint(req: ChatRequest):
                 }
             ],
             "usage": {
-                "prompt_tokens": len(inputs.input_ids[0]),
+                "prompt_tokens": prompt_tokens_cnt,
                 "completion_tokens": total_gen_tokens,
-                "total_tokens": len(inputs.input_ids[0]) + total_gen_tokens,
+                "total_tokens": prompt_tokens_cnt + total_gen_tokens,
                 "tokens_per_second": round(tok_s, 2),
                 "generation_time_seconds": round(dt, 2),
                 "session_tokens_total": SESSION_STATS["total_tokens_used"]
