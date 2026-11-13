@@ -1,0 +1,93 @@
+{
+  "xml_fuzzing": {
+    "xml_case_1": {
+      "success": true,
+      "parsed_func": "criar_arquivo",
+      "parsed_params": {
+        "caminho": "teste.txt",
+        "conteudo": "ola"
+      },
+      "expected_func": "criar_arquivo"
+    },
+    "xml_case_2": {
+      "success": true,
+      "parsed_func": "executar_cmd",
+      "parsed_params": {
+        "comando": "echo 123"
+      },
+      "expected_func": "executar_cmd"
+    },
+    "xml_case_3": {
+      "success": true,
+      "parsed_func": "ler_arquivo",
+      "parsed_params": {
+        "caminho": "config.json"
+      },
+      "expected_func": "ler_arquivo"
+    },
+    "xml_case_4": {
+      "success": true,
+      "parsed_func": "obter_informacoes_sistema",
+      "parsed_params": {},
+      "expected_func": "obter_informacoes_sistema"
+    },
+    "xml_case_5": {
+      "success": true,
+      "parsed_func": "buscar_na_web",
+      "parsed_params": {
+        "termo_busca": "ia aberta"
+      },
+      "expected_func": "buscar_na_web"
+    },
+    "xml_case_6": {
+      "success": true,
+      "parsed_func": "listar_arquivos",
+      "parsed_params": {
+        "diretorio": "tests"
+      },
+      "expected_func": "listar_arquivos"
+    },
+    "xml_case_7": {
+      "success": true,
+      "parsed_func": "listar_agentes",
+      "parsed_params": {},
+      "expected_func": "listar_agentes"
+    },
+    "xml_case_8": {
+      "success": true,
+      "parsed_func": "obter_informacoes_sistema",
+      "parsed_params": {},
+      "expected_func": "obter_informacoes_sistema"
+    },
+    "xml_case_9": {
+      "success": true,
+      "parsed_func": "criar_arquivo",
+      "parsed_params": {
+        "caminho": "tags.html",
+        "conteudo": "<h1>Titulo</h1>"
+      },
+      "expected_func": "criar_arquivo"
+    },
+    "xml_case_10": {
+      "success": true,
+      "parsed_func": "acessar_site",
+      "parsed_params": {
+        "url": "https://exemplo.com"
+      },
+      "expected_func": "acessar_site"
+    }
+  },
+  "concurrency": {
+    "toggle_errors": 0,
+    "chat_successes": 2,
+    "chat_errors": 0,
+    "stream_successes": 2,
+    "stream_errors": 0,
+    "pass": true
+  },
+  "reasoning_budget": {
+    "tokens_streamed": 45,
+    "budget_triggered": true,
+    "pass": true
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "timestamp": "2026-11-13 08:30:15",
+  "total_duration_seconds": 182.63,
+  "loop1_baseline": {
+    "passed": true,
+    "details": "20/20 ferramentas e 6/6 endpoints aprovados"
+  },
+  "loop2_edge_cases": {
+    "passed": true,
+    "details": "30/30 testes de robustez e edge cases aprovados"
+  },
+  "loop3_fuzzing_concurrency": {
+    "passed": true,
+    "details": "10/10 fuzzing XML/JSON, concorrência e reasoning budget aprovados"
+  },
+  "telemetry": {
+    "vram_allocated_gb": 7.64,
+    "vram_total_gb": 12.0,
+    "total_tokens_used": 609,
+    "tokens_per_second": 6.2729555241700705,
+    "total_requests": 13
+  },
+  "certified": true
+}

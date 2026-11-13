@@ -1,0 +1,122 @@
+{
+  "site_url_vazia": {
+    "output": "ERRO: Parâmetro 'url' não informado.",
+    "pass": true
+  },
+  "site_url_inexistente": {
+    "output": "ERRO ao acessar site 'https://dominio-que-certamente-nao-existe-xyz987654.org': <urlopen error [Errn",
+    "pass": true
+  },
+  "site_schema_bloqueado": {
+    "output": "ERRO: Protocolo não permitido na URL 'file:///C:/Windows/win.ini'. Apenas HTTP e HTTPS são suportado",
+    "pass": true
+  },
+  "busca_termo_vazio": {
+    "output": "ERRO: 'termo_busca' não informado.",
+    "pass": true
+  },
+  "busca_simbolos": {
+    "output": "RESULTADOS DA BUSCA PARA '!@#$%^&*()_+-=[]{}|;':,.<>?':\n\nNenhum resultado relevante encontrado.",
+    "pass": true
+  },
+  "agente_vazio": {
+    "output": "ERRO: 'nome' do subagente é obrigatório.",
+    "pass": true
+  },
+  "agente_nome_proibido": {
+    "output": "SUCESSO: Subagente especializado 'agente/teste:*?<>|' criado e salvo em 'config\\agents\\agente_teste.",
+    "pass": true
+  },
+  "invocar_agente_inexistente": {
+    "output": "ERRO: Subagente 'AgenteFantasmaInexistente123' não encontrado. Disponíveis: ['agente_teste', 'Agente",
+    "pass": true
+  },
+  "invocar_tarefa_vazia": {
+    "output": "ERRO: 'nome' do subagente e 'tarefa' são obrigatórios.",
+    "pass": true
+  },
+  "habilidade_codigo_vazio": {
+    "output": "ERRO: 'nome' e 'codigo' são obrigatórios para criar uma habilidade.",
+    "pass": true
+  },
+  "executar_habilidade_inexistente": {
+    "output": "ERRO: Habilidade 'skill_que_nao_existe_xyz' não encontrada. Disponíveis: ['diagnostico_sistema', 'li",
+    "pass": true
+  },
+  "executar_habilidade_com_erro": {
+    "output": "SAÍDA DA HABILIDADE 'skill_com_erro' (Código: 1):\nSTDOUT:\nINICIO\nSTDERR:\nTraceback (most recent call last):\r\n  File \"D:\\",
+    "pass": true
+  },
+  "criar_arq_caminho_vazio": {
+    "output": "ERRO: Parâmetro 'caminho' não informado.",
+    "pass": true
+  },
+  "criar_arq_conteudo_none": {
+    "output": "SUCESSO: Arquivo 'D:\\Programas Antigravity\\Ensinando Modelos Menores com Lora\\test_sandbox_loop2\\arq",
+    "pass": true
+  },
+  "criar_arq_nested": {
+    "output": "SUCESSO: Arquivo 'D:\\Programas Antigravity\\Ensinando Modelos Menores com Lora\\test_sandbox_loop2\\sub",
+    "pass": true
+  },
+  "ler_arq_inexistente": {
+    "output": "ERRO: Arquivo 'arquivo_que_certamente_nao_existe.xyz' não existe.",
+    "pass": true
+  },
+  "ler_arq_quando_diretorio": {
+    "output": "ERRO: 'D:\\Programas Antigravity\\Ensinando Modelos Menores com Lora\\test_sandbox_loop2' é uma pasta/d",
+    "pass": true
+  },
+  "modificar_sobrescrever_cria_dir": {
+    "output": "SUCESSO: Arquivo 'D:\\Programas Antigravity\\Ensinando Modelos Menores com Lora\\test_sandbox_loop2\\pas",
+    "pass": true
+  },
+  "copiar_mesmo_arquivo": {
+    "output": "SUCESSO: Origem e destino são o mesmo arquivo ('D:\\Programas Antigravity\\Ensinando Modelos Menores c",
+    "pass": true
+  },
+  "mover_origem_inexistente": {
+    "output": "ERRO: Origem 'nao_existe.txt' não encontrada.",
+    "pass": true
+  },
+  "deletar_inexistente": {
+    "output": "ERRO: Arquivo ou pasta 'inexistente_123.tmp' não encontrado.",
+    "pass": true
+  },
+  "listar_dir_inexistente": {
+    "output": "ERRO: Diretório 'diretorio_fantasma_xyz' não existe.",
+    "pass": true
+  },
+  "listar_quando_arquivo": {
+    "output": "ERRO: 'D:\\Programas Antigravity\\Ensinando Modelos Menores com Lora\\test_sandbox_loop2\\sub1\\sub2\\sub3",
+    "pass": true
+  },
+  "ps_excecao": {
+    "output": "SAÍDA POWERSHELL (Código de saída: 1):\nSTDERR:\nErro proposital powershell\r\nNo linha:1 caractere:1\r\n+",
+    "pass": true
+  },
+  "cmd_inexistente": {
+    "output": "SAÍDA CMD (Código de saída: 1):\nSTDERR:\n'comando_totalmente_inexistente_123' n├úo ├® reconhecido com",
+    "pass": true
+  },
+  "baixar_404": {
+    "output": "ERRO ao baixar 'https://httpbin.org/status/404': HTTP 404 Not Found",
+    "pass": true
+  },
+  "abrir_inexistente": {
+    "output": "ERRO: Programa ou arquivo 'arquivo_inexistente_xyz_123.exe' não encontrado no computador.",
+    "pass": true
+  },
+  "chat_messages_vazio": {
+    "status": 200,
+    "pass": true
+  },
+  "ferramenta_desconhecida": {
+    "output": "ERRO: Ferramenta desconhecida 'ferramenta_alienigena_xyz'.",
+    "pass": true
+  },
+  "tools_execute_params_none": {
+    "status": 200,
+    "pass": true
+  }
+}

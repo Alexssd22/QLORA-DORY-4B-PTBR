@@ -638,12 +638,18 @@ def run_direct_generation(messages: list, max_tokens: int = 512, use_qlora: bool
 
 def execute_tool(func_name: str, params: dict) -> str:
     """Executa a ferramenta solicitada pelo modelo com total suporte a sites, agentes, habilidades, arquivos e terminal."""
+    if not isinstance(func_name, str):
+        return f"ERRO: Nome da ferramenta deve ser string, recebido {type(func_name)}."
     func_name = func_name.strip()
+    if not isinstance(params, dict):
+        params = {}
     try:
         if func_name == "acessar_site":
-            url = params.get("url", "").strip()
+            url = str(params.get("url") or "").strip()
             if not url:
                 return "ERRO: Parâmetro 'url' não informado."
+            if any(url.lower().startswith(b) for b in ["file:", "javascript:", "data:", "about:"]):
+                return f"ERRO: Protocolo não permitido na URL '{url}'. Apenas HTTP e HTTPS são suportados."
             if not url.startswith("http://") and not url.startswith("https://"):
                 url = "https://" + url
             print(f"\n[🌐 Acessando Site]: {url}")
@@ -679,7 +685,7 @@ def execute_tool(func_name: str, params: dict) -> str:
                 return f"ERRO ao acessar site '{url}': {str(e)}"
 
         elif func_name == "buscar_na_web":
-            termo = params.get("termo_busca", "").strip()
+            termo = str(params.get("termo_busca") or "").strip()
             if not termo:
                 return "ERRO: 'termo_busca' não informado."
             print(f"\n[🌐 Busca na Web]: {termo}")
@@ -704,21 +710,24 @@ def execute_tool(func_name: str, params: dict) -> str:
                 return f"ERRO na busca na web para '{termo}': {str(e)}"
 
         elif func_name == "criar_agente":
-            nome = params.get("nome", "").strip()
-            papel = params.get("papel", "").strip()
-            instrucoes = params.get("instrucoes", "").strip()
+            nome = str(params.get("nome") or "").strip()
+            papel = str(params.get("papel") or "").strip()
+            instrucoes = str(params.get("instrucoes") or "").strip()
             if not nome:
                 return "ERRO: 'nome' do subagente é obrigatório."
             if not papel or not instrucoes:
                 return "ERRO: 'papel' e 'instrucoes' são obrigatórios para definir a especialidade do agente."
             
-            safe_name = re.sub(r'[^a-zA-Z0-9_\-]', '_', nome)
+            safe_name = re.sub(r'[^a-zA-Z0-9_\-]', '_', nome).strip('_')
+            if not safe_name:
+                safe_name = f"agente_{int(time.time())}"
             agent_data = {
                 "nome": nome,
                 "papel": papel,
                 "instrucoes": instrucoes,
                 "criado_em": time.strftime("%Y-%m-%d %H:%M:%S")
             }
+            os.makedirs(AGENTS_DIR, exist_ok=True)
             agent_file = os.path.join(AGENTS_DIR, f"{safe_name}.json")
             with open(agent_file, "w", encoding="utf-8") as f:
                 json.dump(agent_data, f, indent=2, ensure_ascii=False)
@@ -778,17 +787,20 @@ def execute_tool(func_name: str, params: dict) -> str:
             return f"--- RESPOSTA DO SUBAGENTE '{agent_info['nome']}' ({agent_info['papel']}) ---\n{sub_res}"
 
         elif func_name == "criar_habilidade":
-            nome = params.get("nome", "").strip()
-            descricao = params.get("descricao", "").strip()
-            linguagem = params.get("linguagem", "python").strip().lower()
-            codigo = params.get("codigo", "").strip()
+            nome = str(params.get("nome") or "").strip()
+            descricao = str(params.get("descricao") or "").strip()
+            linguagem = str(params.get("linguagem") or "python").strip().lower()
+            codigo = str(params.get("codigo") or "").strip()
             if not nome or not codigo:
                 return "ERRO: 'nome' e 'codigo' são obrigatórios para criar uma habilidade."
             
-            safe_name = re.sub(r'[^a-zA-Z0-9_\-]', '_', nome)
+            safe_name = re.sub(r'[^a-zA-Z0-9_\-]', '_', nome).strip('_')
+            if not safe_name:
+                safe_name = f"skill_{int(time.time())}"
             ext_map = {"python": ".py", "powershell": ".ps1", "batch": ".bat", "cmd": ".bat"}
             ext = ext_map.get(linguagem, ".py")
             
+            os.makedirs(SKILLS_DIR, exist_ok=True)
             script_path = os.path.join(SKILLS_DIR, f"{safe_name}{ext}")
             meta_path = os.path.join(SKILLS_DIR, f"{safe_name}.json")
             
@@ -865,25 +877,33 @@ def execute_tool(func_name: str, params: dict) -> str:
                 if args:
                     cmd_list.extend(shlex.split(args))
             
-            proc = subprocess.run(
-                cmd_list,
-                capture_output=True,
-                text=True,
-                timeout=60
-            )
-            out = f"SAÍDA DA HABILIDADE '{nome}' (Código: {proc.returncode}):"
-            if proc.stdout.strip():
-                out += f"\nSTDOUT:\n{proc.stdout.strip()[:4000]}"
-            if proc.stderr.strip():
-                out += f"\nSTDERR:\n{proc.stderr.strip()[:2000]}"
-            return out
+            try:
+                proc = subprocess.run(
+                    cmd_list,
+                    capture_output=True,
+                    timeout=60
+                )
+                stdout = proc.stdout.decode("utf-8", errors="replace").strip()
+                stderr = proc.stderr.decode("utf-8", errors="replace").strip()
+                out = f"SAÍDA DA HABILIDADE '{nome}' (Código: {proc.returncode}):"
+                if stdout:
+                    out += f"\nSTDOUT:\n{stdout[:4000]}"
+                if stderr:
+                    out += f"\nSTDERR:\n{stderr[:2000]}"
+                return out
+            except subprocess.TimeoutExpired:
+                return f"ERRO: Habilidade '{nome}' excedeu o tempo limite de execução (60s)."
+            except Exception as e:
+                return f"ERRO ao executar habilidade '{nome}': {str(e)}"
 
         elif func_name == "ler_arquivo":
-            caminho = params.get("caminho", "").strip()
+            caminho = str(params.get("caminho") or "").strip()
             if not caminho:
                 return "ERRO: Parâmetro 'caminho' não informado."
             if not os.path.exists(caminho):
                 return f"ERRO: Arquivo '{caminho}' não existe."
+            if os.path.isdir(caminho):
+                return f"ERRO: '{caminho}' é uma pasta/diretório, não um arquivo de texto. Use a ferramenta 'listar_arquivos'."
             encodings = ["utf-8", "latin-1", "cp1252"]
             conteudo = None
             for enc in encodings:
@@ -898,8 +918,8 @@ def execute_tool(func_name: str, params: dict) -> str:
             return f"CONTEÚDO DO ARQUIVO ({caminho}):\n{conteudo}"
 
         elif func_name == "criar_arquivo":
-            caminho = params.get("caminho", "").strip()
-            conteudo = params.get("conteudo", "")
+            caminho = str(params.get("caminho") or "").strip()
+            conteudo = str(params.get("conteudo") if params.get("conteudo") is not None else "")
             if not caminho:
                 return "ERRO: Parâmetro 'caminho' não informado."
             parent = os.path.dirname(caminho)
@@ -910,27 +930,28 @@ def execute_tool(func_name: str, params: dict) -> str:
             return f"SUCESSO: Arquivo '{caminho}' criado com sucesso ({len(conteudo)} caracteres)."
 
         elif func_name == "modificar_arquivo":
-            caminho = params.get("caminho", "").strip()
-            conteudo = params.get("conteudo", "")
-            modo = params.get("modo", "anexar").strip().lower()
+            caminho = str(params.get("caminho") or "").strip()
+            conteudo = str(params.get("conteudo") if params.get("conteudo") is not None else "")
+            modo = str(params.get("modo") or "anexar").strip().lower()
             if not caminho:
                 return "ERRO: Parâmetro 'caminho' não informado."
-            if not os.path.exists(caminho) and modo == "anexar":
-                parent = os.path.dirname(caminho)
-                if parent:
-                    os.makedirs(parent, exist_ok=True)
+            parent = os.path.dirname(caminho)
+            if parent:
+                os.makedirs(parent, exist_ok=True)
             file_mode = "a" if modo == "anexar" else "w"
             with open(caminho, file_mode, encoding="utf-8") as f:
                 f.write(conteudo)
             return f"SUCESSO: Arquivo '{caminho}' atualizado (modo: {modo})."
 
         elif func_name == "mover_arquivo":
-            origem = params.get("origem", "").strip()
-            destino = params.get("destino", "").strip()
+            origem = str(params.get("origem") or "").strip()
+            destino = str(params.get("destino") or "").strip()
             if not origem or not destino:
                 return "ERRO: 'origem' e 'destino' são obrigatórios."
             if not os.path.exists(origem):
                 return f"ERRO: Origem '{origem}' não encontrada."
+            if os.path.abspath(origem) == os.path.abspath(destino):
+                return f"SUCESSO: Origem e destino são o mesmo arquivo ('{origem}'). Nenhuma movimentação necessária."
             parent = os.path.dirname(destino)
             if parent:
                 os.makedirs(parent, exist_ok=True)
@@ -938,12 +959,14 @@ def execute_tool(func_name: str, params: dict) -> str:
             return f"SUCESSO: '{origem}' movido/renomeado para '{destino}'."
 
         elif func_name == "copiar_arquivo":
-            origem = params.get("origem", "").strip()
-            destino = params.get("destino", "").strip()
+            origem = str(params.get("origem") or "").strip()
+            destino = str(params.get("destino") or "").strip()
             if not origem or not destino:
                 return "ERRO: 'origem' e 'destino' são obrigatórios."
             if not os.path.exists(origem):
                 return f"ERRO: Origem '{origem}' não encontrada."
+            if os.path.abspath(origem) == os.path.abspath(destino):
+                return f"SUCESSO: Origem e destino são o mesmo arquivo ('{origem}'). Nenhuma cópia necessária."
             parent = os.path.dirname(destino)
             if parent:
                 os.makedirs(parent, exist_ok=True)
@@ -954,7 +977,7 @@ def execute_tool(func_name: str, params: dict) -> str:
             return f"SUCESSO: '{origem}' copiado para '{destino}'."
 
         elif func_name == "deletar_arquivo":
-            caminho = params.get("caminho", "").strip()
+            caminho = str(params.get("caminho") or "").strip()
             if not caminho:
                 return "ERRO: Parâmetro 'caminho' não informado."
             if not os.path.exists(caminho):
@@ -967,9 +990,11 @@ def execute_tool(func_name: str, params: dict) -> str:
                 return f"SUCESSO: Arquivo '{caminho}' deletado com sucesso."
 
         elif func_name == "listar_arquivos":
-            diretorio = params.get("diretorio", ".").strip() or "."
+            diretorio = str(params.get("diretorio") or ".").strip() or "."
             if not os.path.exists(diretorio):
                 return f"ERRO: Diretório '{diretorio}' não existe."
+            if os.path.isfile(diretorio):
+                return f"ERRO: '{diretorio}' é um arquivo, não um diretório. Use a ferramenta 'ler_arquivo' para inspecioná-lo."
             items = os.listdir(diretorio)
             res = []
             for item in sorted(items)[:100]:
@@ -983,69 +1008,92 @@ def execute_tool(func_name: str, params: dict) -> str:
             return f"CONTEÚDO DE '{diretorio}':\n" + "\n".join(res)
 
         elif func_name == "executar_comando":
-            comando = params.get("comando", "").strip()
+            comando = str(params.get("comando") or "").strip()
             if not comando:
                 return "ERRO: Parâmetro 'comando' não informado."
             print(f"\n[⚡ Terminal PowerShell]: {comando}")
-            proc = subprocess.run(
-                ["powershell", "-NoProfile", "-Command", comando],
-                capture_output=True,
-                text=True,
-                timeout=45,
-            )
-            stdout = proc.stdout.strip()
-            stderr = proc.stderr.strip()
-            out = f"SAÍDA POWERSHELL (Código de saída: {proc.returncode}):"
-            if stdout:
-                out += f"\nSTDOUT:\n{stdout[:4000]}"
-            if stderr:
-                out += f"\nSTDERR:\n{stderr[:2000]}"
-            return out
+            try:
+                proc = subprocess.run(
+                    ["powershell", "-NoProfile", "-NonInteractive", "-Command", comando],
+                    capture_output=True,
+                    timeout=45,
+                )
+                stdout = proc.stdout.decode("utf-8", errors="replace").strip()
+                stderr = proc.stderr.decode("utf-8", errors="replace").strip()
+                out = f"SAÍDA POWERSHELL (Código de saída: {proc.returncode}):"
+                if stdout:
+                    out += f"\nSTDOUT:\n{stdout[:4000]}"
+                if stderr:
+                    out += f"\nSTDERR:\n{stderr[:2000]}"
+                return out
+            except subprocess.TimeoutExpired:
+                return f"ERRO: Comando PowerShell excedeu o tempo limite de execução (45s)."
+            except Exception as e:
+                return f"ERRO ao executar PowerShell: {str(e)}"
 
         elif func_name == "executar_cmd":
-            comando = params.get("comando", "").strip()
+            comando = str(params.get("comando") or "").strip()
             if not comando:
                 return "ERRO: Parâmetro 'comando' não informado."
             print(f"\n[⚡ Terminal CMD]: {comando}")
-            proc = subprocess.run(
-                ["cmd.exe", "/c", comando],
-                capture_output=True,
-                text=True,
-                timeout=45,
-            )
-            stdout = proc.stdout.strip()
-            stderr = proc.stderr.strip()
-            out = f"SAÍDA CMD (Código de saída: {proc.returncode}):"
-            if stdout:
-                out += f"\nSTDOUT:\n{stdout[:4000]}"
-            if stderr:
-                out += f"\nSTDERR:\n{stderr[:2000]}"
-            return out
+            try:
+                proc = subprocess.run(
+                    ["cmd.exe", "/c", comando],
+                    capture_output=True,
+                    timeout=45,
+                )
+                stdout = proc.stdout.decode("cp850", errors="replace").strip()
+                stderr = proc.stderr.decode("cp850", errors="replace").strip()
+                out = f"SAÍDA CMD (Código de saída: {proc.returncode}):"
+                if stdout:
+                    out += f"\nSTDOUT:\n{stdout[:4000]}"
+                if stderr:
+                    out += f"\nSTDERR:\n{stderr[:2000]}"
+                return out
+            except subprocess.TimeoutExpired:
+                return f"ERRO: Comando CMD excedeu o tempo limite de execução (45s)."
+            except Exception as e:
+                return f"ERRO ao executar CMD: {str(e)}"
 
         elif func_name == "baixar_arquivo":
-            url = params.get("url", "").strip()
-            destino = params.get("destino", "").strip()
+            url = str(params.get("url") or "").strip()
+            destino = str(params.get("destino") or "").strip()
             if not url or not destino:
                 return "ERRO: 'url' e 'destino' são obrigatórios."
+            if not url.startswith("http://") and not url.startswith("https://"):
+                url = "https://" + url
             parent = os.path.dirname(destino)
             if parent:
                 os.makedirs(parent, exist_ok=True)
-            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-            ssl_ctx = ssl._create_unverified_context()
-            with urllib.request.urlopen(req, context=ssl_ctx, timeout=30) as resp, open(destino, "wb") as f:
-                f.write(resp.read())
-            return f"SUCESSO: Arquivo baixado da internet e salvo em '{destino}' ({os.path.getsize(destino)} bytes)."
+            try:
+                req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+                ssl_ctx = ssl._create_unverified_context()
+                with urllib.request.urlopen(req, context=ssl_ctx, timeout=30) as resp, open(destino, "wb") as f:
+                    f.write(resp.read())
+                return f"SUCESSO: Arquivo baixado da internet e salvo em '{destino}' ({os.path.getsize(destino)} bytes)."
+            except urllib.error.HTTPError as he:
+                return f"ERRO ao baixar '{url}': HTTP {he.code} {he.reason}"
+            except Exception as e:
+                return f"ERRO ao baixar '{url}': {str(e)}"
 
         elif func_name == "abrir_programa":
-            caminho = params.get("caminho_ou_url", "").strip()
+            caminho = str(params.get("caminho_ou_url") or "").strip()
             if not caminho:
                 return "ERRO: 'caminho_ou_url' não informado."
             print(f"\n[🚀 Abrir no Windows]: {caminho}")
-            if hasattr(os, "startfile"):
-                os.startfile(caminho)
-            else:
-                subprocess.Popen(["cmd.exe", "/c", "start", "", caminho])
-            return f"SUCESSO: Solicitação para abrir '{caminho}' enviada ao sistema operacional."
+            try:
+                is_url = caminho.startswith("http://") or caminho.startswith("https://")
+                if not is_url and not os.path.exists(caminho):
+                    # Tenta procurar no PATH
+                    if not shutil.which(caminho):
+                        return f"ERRO: Programa ou arquivo '{caminho}' não encontrado no computador."
+                if hasattr(os, "startfile"):
+                    os.startfile(caminho)
+                else:
+                    subprocess.Popen(["cmd.exe", "/c", "start", "", caminho])
+                return f"SUCESSO: Solicitação para abrir '{caminho}' enviada ao sistema operacional."
+            except Exception as e:
+                return f"ERRO ao abrir '{caminho}': {str(e)}"
 
         elif func_name == "obter_informacoes_sistema":
             gpu_name = torch.cuda.get_device_name(0) if torch.cuda.is_available() else "Nenhuma"
@@ -1159,8 +1207,8 @@ def parse_tool_call(text: str):
     if not text:
         return None
     
-    # 1. XML Formato Dory / Nemotron com <function=...> ou <function name=...> ou <function>
-    if '<tool_call>' in text or '<function=' in text or '<function name=' in text or '<function>' in text:
+    # 1. XML Formato Dory / Nemotron com <function... ou <tool_call>
+    if any(k in text for k in ['<tool_call>', '<function']):
         block = text
         if '<tool_call>' in text:
             start = text.find('<tool_call>')
@@ -1171,44 +1219,66 @@ def parse_tool_call(text: str):
                 block = text[start:]
         
         func_name = None
-        f_m = re.search(r'<function(?:=|\s+name=[\"\']?)([^>\s\"\']+)', block)
+        # Formatos: <function="name">, <function name="name">, <function = "name">, etc.
+        f_m = re.search(r'<function(?:\s*=\s*|\s+name\s*=\s*)\s*[\"\']?([^>\s\"\'/]+)[\"\']?\s*/?>', block, re.IGNORECASE)
         if not f_m:
-            f_m = re.search(r'<function>\s*<name>([^<]+)</name>', block)
+            # Formatos: <function><name>nome</name></function> ou <function>nome</function>
+            f_m = re.search(r'<function>\s*(?:<name>)?\s*([a-zA-Z0-9_\-]+)\s*(?:</name>)?\s*(?:</function>)?', block, re.IGNORECASE)
+        
         if f_m:
             func_name = f_m.group(1).strip()
         
         if func_name:
             params = {}
+            # Parâmetros estilo: <parameter=key>val</parameter> ou <parameter = "key">val</parameter> ou truncados
             p_matches = re.finditer(
-                r'<parameter(?:=|\s+name=[\"\']?)([^>\s\"\']+)[^>]*>(.*?)(?:</parameter>|(?=<parameter)|(?=</function)|$)',
+                r'<parameter(?:\s*=\s*|\s+name\s*=\s*)\s*[\"\']?([^>\s\"\'/]+)[\"\']?[^>]*>(.*?)(?:</parameter>|(?=<parameter)|(?=</function)|(?=</tool_call>)|$)',
                 block,
-                re.DOTALL
+                re.DOTALL | re.IGNORECASE
             )
             for pm in p_matches:
                 p_key = pm.group(1).strip()
-                p_val = pm.group(2).strip()
+                p_val = html.unescape(pm.group(2).strip())
                 params[p_key] = p_val
             
+            # Formato alternativo <parameter><name>key</name><value>val</value></parameter>
             if not params:
-                p2_matches = re.finditer(r'<parameter>\s*<name>([^<]+)</name>\s*<value>([^<]*)</value>', block, re.DOTALL)
+                p2_matches = re.finditer(r'<parameter>\s*<name>([^<]+)</name>\s*<value>([^<]*)</value>', block, re.DOTALL | re.IGNORECASE)
                 for p2 in p2_matches:
-                    params[p2.group(1).strip()] = p2.group(2).strip()
+                    params[p2.group(1).strip()] = html.unescape(p2.group(2).strip())
 
             return func_name, params
 
-    # 2. JSON Markdown ou Bloco JSON puro
-    m = re.search(r'```(?:json)?\s*(\{[\s\S]*?\})\s*```', text)
-    if not m:
-        m = re.search(r'(\{\s*\"(?:function|name|tool)\"\s*:[\s\S]*?\})', text)
-    if m:
-        try:
-            data = json.loads(m.group(1))
-            name = data.get("function") or data.get("name") or data.get("tool")
-            args = data.get("parameters") or data.get("arguments") or data.get("args") or {}
-            if name:
-                return name, args
-        except Exception:
-            pass
+    # 2. JSON Markdown ou Bloco JSON com chaves aninhadas balanceadas
+    idx = text.find('{')
+    while idx != -1:
+        depth = 0
+        in_str = False
+        escape = False
+        for i in range(idx, len(text)):
+            c = text[i]
+            if c == '"' and not escape:
+                in_str = not in_str
+            elif not in_str:
+                if c == '{':
+                    depth += 1
+                elif c == '}':
+                    depth -= 1
+                    if depth == 0:
+                        candidate = text[idx:i+1].strip()
+                        try:
+                            data = json.loads(candidate)
+                            if isinstance(data, dict):
+                                name = data.get("function") or data.get("name") or data.get("tool")
+                                if name:
+                                    args = data.get("parameters") or data.get("arguments") or data.get("args") or {}
+                                    return str(name).strip(), args if isinstance(args, dict) else {}
+                        except Exception:
+                            pass
+                        break
+            escape = (c == '\\' and not escape)
+        idx = text.find('{', idx + 1)
+
     return None
 
 # ============================================================
@@ -2674,13 +2744,51 @@ def delete_chat(chat_id: str):
     return {"status": "ok"}
 
 # ============================================================
+# ENDPOINTS DE FERRAMENTAS E EXECUÇÃO DIRETA (LOOP 1 - EXPANSÃO)
+# ============================================================
+
+class ToolExecuteRequest(BaseModel):
+    function: str
+    parameters: Optional[Dict[str, Any]] = None
+
+@app.get("/api/tools")
+def list_available_tools():
+    """Retorna todas as 20 ferramentas registradas e seus schemas."""
+    return {"tools": TOOLS_DEFINITIONS, "total": len(TOOLS_DEFINITIONS)}
+
+@app.post("/api/tools/execute")
+def execute_tool_endpoint(req: ToolExecuteRequest):
+    """Executa qualquer uma das 20 ferramentas de forma direta e padronizada."""
+    func = req.function.strip()
+    params = req.parameters if req.parameters is not None else {}
+    output = execute_tool(func, params)
+    return {"function": func, "parameters": params, "output": output}
+
+class ToolParseRequest(BaseModel):
+    text: str
+
+@app.post("/api/tools/parse")
+def parse_tool_endpoint(req: ToolParseRequest):
+    """Audita e extrai chamadas de ferramentas a partir de textos malformados ou XMLs complexos."""
+    res = parse_tool_call(req.text)
+    if res:
+        return {"detected": True, "function": res[0], "parameters": res[1]}
+    return {"detected": False, "function": None, "parameters": {}}
+
+# ============================================================
 # STREAMING SSE TOKEN A TOKEN EM TEMPO REAL
 # ============================================================
 
 @app.post("/api/chat/stream")
 async def chat_stream_endpoint(req: ChatRequest):
     """Transmite a resposta gerada token a token via Server-Sent Events (SSE)."""
-    raw_msgs = [{"role": m["role"], "content": m["content"]} for m in req.messages]
+    if not req.messages:
+        async def empty_stream():
+            yield f"data: {json.dumps({'type': 'token', 'token': 'Olá! Como posso ajudar você hoje?'})}\n\n"
+            yield "data: [DONE]\n\n"
+        return StreamingResponse(empty_stream(), media_type="text/event-stream")
+
+    raw_msgs = [{"role": m.get("role", "user"), "content": m.get("content", "")} for m in req.messages if isinstance(m, dict)]
     
     enable_qlora = req.enable_qlora if req.enable_qlora is not None else bool(SETTINGS.get("enable_qlora", True))
     sys_prompt = SYSTEM_AGENT_PROMPT_PTBR if enable_qlora else SYSTEM_AGENT_PROMPT_EN
@@ -2929,8 +3037,16 @@ async def chat_stream_endpoint(req: ChatRequest):
 @app.post("/api/chat")
 @app.post("/v1/chat/completions")
 def chat_endpoint(req: ChatRequest):
+    if not req.messages:
+        return {
+            "id": f"chatcmpl-{int(time.time())}",
+            "object": "chat.completion",
+            "created": int(time.time()),
+            "choices": [{"index": 0, "message": {"role": "assistant", "content": "Olá! Como posso ajudar você hoje?", "thought": "", "tool_calls": []}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "tokens_per_second": 0.0, "generation_time_seconds": 0.0, "session_tokens_total": SESSION_STATS["total_tokens_used"]}
+        }
     with generation_lock:
-        raw_msgs = [{"role": m["role"], "content": m["content"]} for m in req.messages]
+        raw_msgs = [{"role": m.get("role", "user"), "content": m.get("content", "")} for m in req.messages if isinstance(m, dict)]
         
         enable_qlora = req.enable_qlora if req.enable_qlora is not None else bool(SETTINGS.get("enable_qlora", True))
         sys_prompt = SYSTEM_AGENT_PROMPT_PTBR if enable_qlora else SYSTEM_AGENT_PROMPT_EN

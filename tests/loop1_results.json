@@ -1,0 +1,115 @@
+{
+  "endpoints": {
+    "get_settings": {
+      "status": 200,
+      "ok": true
+    },
+    "toggle_qlora": {
+      "status": 200,
+      "toggle_ok": true,
+      "ok": true
+    },
+    "telemetry": {
+      "status": 200,
+      "ok": true
+    },
+    "api_chat": {
+      "status": 200,
+      "reply": "Oiocadas do usuário:",
+      "ok": true
+    },
+    "v1_chat_completions": {
+      "status": 200,
+      "reply": "Oipras simples e forneça respost",
+      "ok": true
+    },
+    "api_chat_stream": {
+      "status": 200,
+      "tokens_count": 6,
+      "done_received": true,
+      "ok": true
+    }
+  },
+  "tools": {
+    "acessar_site": {
+      "output": "CONTEÚDO DO SITE:\nURL: https://httpbin.org/get\nTÍTULO: Sem título\n\nTEXTO EXTRAÍDO:\n{\n \"args\": {},\n \"",
+      "ok": true
+    },
+    "buscar_na_web": {
+      "output": "RESULTADOS DA BUSCA PARA 'Rust programming':\n\n[1] rust-lang.org\nRust is a fast, reliable, and produc",
+      "ok": true
+    },
+    "criar_agente": {
+      "output": "SUCESSO: Subagente especializado 'Auditor_Loop1' criado e salvo em 'config\\agents\\Auditor_Loop1.json",
+      "ok": true
+    },
+    "listar_agentes": {
+      "output": "SUBAGENTES ESPECIALIZADOS CADASTRADOS:\n\n• Nome: Agente_Teste_Loop1\n  Papel: Testador de Confiabilida",
+      "ok": true
+    },
+    "invocar_agente": {
+      "output": "--- RESPOSTA DO SUBAGENTE 'Auditor_Loop1' (Auditor de Qualidade) ---\nO objetivo de auditoria 250796.",
+      "ok": true
+    },
+    "criar_habilidade": {
+      "output": "SUCESSO: Habilidade 'somador_teste' criada em 'config\\skills\\somador_teste.py' (python). Para execut",
+      "ok": true
+    },
+    "listar_habilidades": {
+      "output": "HABILIDADES E AUTOMAÇÕES CADASTRADAS:\n\n• Nome: diagnostico_sistema (python)\n  Descrição: Coleta e ex",
+      "ok": true
+    },
+    "executar_habilidade": {
+      "output": "SAÍDA DA HABILIDADE 'somador_teste' (Código: 0):\nSTDOUT:\nSOMA_RESULT: 40",
+      "ok": true
+    },
+    "criar_arquivo": {
+      "output": "SUCESSO: Arquivo 'D:\\Programas Antigravity\\Ensinando Modelos Menores com Lora\\test_sandbox_loop1\\arq",
+      "ok": true
+    },
+    "ler_arquivo": {
+      "output": "CONTEÚDO DO ARQUIVO (D:\\Programas Antigravity\\Ensinando Modelos Menores com Lora\\test_sandbox_loop1\\",
+      "ok": true
+    },
+    "modificar_arquivo": {
+      "output": "anexar=True, sobrescrever=True",
+      "ok": true
+    },
+    "copiar_arquivo": {
+      "output": "SUCESSO: 'D:\\Programas Antigravity\\Ensinando Modelos Menores com Lora\\test_sandbox_loop1\\arq_teste.t",
+      "ok": true
+    },
+    "mover_arquivo": {
+      "output": "SUCESSO: 'D:\\Programas Antigravity\\Ensinando Modelos Menores com Lora\\test_sandbox_loop1\\arq_copia.t",
+      "ok": true
+    },
+    "deletar_arquivo": {
+      "output": "SUCESSO: Arquivo 'D:\\Programas Antigravity\\Ensinando Modelos Menores com Lora\\test_sandbox_loop1\\arq",
+      "ok": true
+    },
+    "listar_arquivos": {
+      "output": "CONTEÚDO DE 'D:\\Programas Antigravity\\Ensinando Modelos Menores com Lora\\test_sandbox_loop1':\n[ARQ] ",
+      "ok": true
+    },
+    "executar_comando": {
+      "output": "SAÍDA POWERSHELL (Código de saída: 0):\nSTDOUT:\nTESTE_PS_OK",
+      "ok": true
+    },
+    "executar_cmd": {
+      "output": "SAÍDA CMD (Código de saída: 0):\nSTDOUT:\nTESTE_CMD_OK",
+      "ok": true
+    },
+    "baixar_arquivo": {
+      "output": "SUCESSO: Arquivo baixado da internet e salvo em 'D:\\Programas Antigravity\\Ensinando Modelos Menores ",
+      "ok": true
+    },
+    "obter_informacoes_sistema": {
+      "output": "INFORMAÇÕES DO SISTEMA:\n{\n  \"sistema_operacional\": \"Windows 10 (10.0.19044)\",\n  \"processador\": \"Inte",
+      "ok": true
+    },
+    "abrir_programa": {
+      "output": "SUCESSO: Solicitação para abrir 'D:\\Programas Antigravity\\Ensinando Modelos Menores com Lora\\test_sa",
+      "ok": true
+    }
+  }
+}
