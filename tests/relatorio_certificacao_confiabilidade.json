@@ -1,0 +1,55 @@
+{
+  "timestamp": "2026-11-13 14:23:25",
+  "auditor_seguranca_sistema": {
+    "protecao_exclusao_raiz_sistema": {
+      "passou": true,
+      "detalhes": "6/6 caminhos críticos bloqueados com sucesso."
+    },
+    "sanitizacao_nomes_reservados_windows": {
+      "passou": true,
+      "detalhes": "Nome reservado 'CON' sanitizado automaticamente para 'agente_CON.json'."
+    },
+    "deteccao_arquivos_binarios": {
+      "passou": true,
+      "detalhes": "Arquivo binário detectado e protegido contra leitura inadequada como texto."
+    },
+    "bloqueio_protocolos_inseguros_download": {
+      "passou": true,
+      "detalhes": "Protocolo file:// bloqueado com sucesso em baixar_arquivo."
+    },
+    "bloqueio_esquemas_perigosos_abrir_programa": {
+      "passou": true,
+      "detalhes": "Protocolo javascript: bloqueado com sucesso em abrir_programa."
+    }
+  },
+  "analisador_ia_conversa": {
+    "alternancia_qlora": {
+      "passou": true,
+      "detalhes": "Alternância QLoRA operando dinamicamente (False -> True)."
+    },
+    "parse_xml_ferramentas": {
+      "passou": true,
+      "detalhes": "Parser XML Dory extraiu tool_call perfeitamente."
+    },
+    "streaming_sse_resiliente": {
+      "passou": true,
+      "detalhes": "SSE operando em tempo real com 8 tokens e encerramento limpo [DONE]."
+    }
+  },
+  "testador_ferramentas": {
+    "total_ferramentas": 20,
+    "ciclo_arquivos_ok": true,
+    "sistema_hardware_ok": true,
+    "powershell_ok": true,
+    "cmd_ok": true,
+    "busca_web_ok": true,
+    "listagens_ok": true,
+    "todas_20_operantes": true
+  },
+  "api_endpoints": {
+    "settings": true,
+    "telemetry": true,
+    "openai_compat": true
+  },
+  "status_geral": "APROVADO"
+}

@@ -592,21 +592,100 @@ Answer questions directly with clarity and accuracy without opening empty code b
 
 SYSTEM_AGENT_PROMPT = SYSTEM_AGENT_PROMPT_PTBR
 
-def run_direct_generation(messages: list, max_tokens: int = 512, use_qlora: bool = True) -> str:
-    """Executa inferência direta e limpa no Dory (usado para subagentes e tarefas focadas)."""
+# ============================================================
+# AUDITORIA E SANITIZAÇÃO DE SEGURANÇA E AMBIENTE (LOOP 2 - REFINAMENTO)
+# ============================================================
+
+WINDOWS_RESERVED_NAMES = {
+    "CON", "PRN", "AUX", "NUL",
+    "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+    "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"
+}
+
+def sanitize_identifier_name(name: str, default_prefix: str = "item") -> str:
+    """Sanitiza nomes para arquivos/agentes/habilidades, evitando nomes reservados do Windows e caracteres ilegais."""
+    clean = re.sub(r'[^a-zA-Z0-9_\-]', '_', str(name or "")).strip('_')
+    if not clean or clean.upper() in WINDOWS_RESERVED_NAMES:
+        clean = f"{default_prefix}_{clean if clean else int(time.time())}"
+    return clean
+
+def is_protected_system_path(path_str: str) -> bool:
+    """Verifica se um caminho representa a raiz de um volume ou diretórios protegidos do sistema operacional."""
+    if not path_str or not isinstance(path_str, str):
+        return True
+    p = path_str.strip()
+    if not p:
+        return True
+    if p in [".", "..", "/", "\\"]:
+        return True
     try:
-        prompt = tokenizer.apply_chat_template(
-            messages,
-            tokenize=False,
-            add_generation_prompt=True,
-            enable_thinking=False,
-        )
-        inputs = tokenizer(prompt, return_tensors="pt").to("cuda" if torch.cuda.is_available() else "cpu")
-        eos_id = tokenizer.eos_token_id if tokenizer.eos_token_id is not None else 11
-        pad_id = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else eos_id
-        with torch.no_grad():
-            if is_lora and not use_qlora:
-                with model.disable_adapter():
+        abs_p = os.path.abspath(p)
+        # 1. Raízes de disco (ex: C:\, D:\, \, /)
+        drive, rest = os.path.splitdrive(abs_p)
+        if rest in ["\\", "/", "", "\\\\"]:
+            return True
+        # 2. Pastas críticas do Windows e diretórios do sistema
+        windir = os.environ.get("WINDIR", "C:\\Windows").lower()
+        progfiles = os.environ.get("ProgramFiles", "C:\\Program Files").lower()
+        progfiles_x86 = os.environ.get("ProgramFiles(x86)", "C:\\Program Files (x86)").lower()
+        system_root = os.environ.get("SystemRoot", "C:\\Windows").lower()
+        abs_lower = abs_p.lower()
+
+        critical_dirs = [windir, progfiles, progfiles_x86, system_root]
+        for c_dir in critical_dirs:
+            if abs_lower == c_dir or abs_lower.startswith(c_dir + "\\") or abs_lower.startswith(c_dir + "/"):
+                return True
+        return False
+    except Exception:
+        return True
+
+BINARY_EXTENSIONS = {
+    ".exe", ".dll", ".so", ".dylib", ".bin", ".pt", ".safetensors", ".iso", ".zip",
+    ".tar", ".gz", ".7z", ".rar", ".png", ".jpg", ".jpeg", ".gif", ".ico", ".webp",
+    ".mp4", ".mkv", ".avi", ".mp3", ".wav", ".flac", ".pdf", ".docx", ".xlsx", ".pptx"
+}
+
+def is_binary_file(path_str: str) -> bool:
+    """Determina se o arquivo é binário com base na extensão e amostragem de bytes nulos."""
+    _, ext = os.path.splitext(path_str)
+    if ext.lower() in BINARY_EXTENSIONS:
+        return True
+    try:
+        with open(path_str, "rb") as f:
+            chunk = f.read(1024)
+            if b"\x00" in chunk:
+                return True
+    except Exception:
+        pass
+    return False
+
+def run_direct_generation(messages: list, max_tokens: int = 512, use_qlora: bool = True) -> str:
+    """Executa inferência direta e limpa no Dory com lock de GPU e suporte a QLoRA/idioma."""
+    with generation_lock:
+        try:
+            prompt = tokenizer.apply_chat_template(
+                messages,
+                tokenize=False,
+                add_generation_prompt=True,
+                enable_thinking=False,
+            )
+            inputs = tokenizer(prompt, return_tensors="pt").to("cuda" if torch.cuda.is_available() else "cpu")
+            eos_id = tokenizer.eos_token_id if tokenizer.eos_token_id is not None else 11
+            pad_id = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else eos_id
+            with torch.no_grad():
+                if is_lora and not use_qlora:
+                    with model.disable_adapter():
+                        output_tokens = model.generate(
+                            **inputs,
+                            max_new_tokens=max_tokens,
+                            temperature=0.6,
+                            top_p=0.9,
+                            repetition_penalty=1.10,
+                            do_sample=True,
+                            eos_token_id=eos_id,
+                            pad_token_id=pad_id,
+                        )
+                else:
                     output_tokens = model.generate(
                         **inputs,
                         max_new_tokens=max_tokens,
@@ -617,24 +696,13 @@ def run_direct_generation(messages: list, max_tokens: int = 512, use_qlora: bool
                         eos_token_id=eos_id,
                         pad_token_id=pad_id,
                     )
-            else:
-                output_tokens = model.generate(
-                    **inputs,
-                    max_new_tokens=max_tokens,
-                    temperature=0.6,
-                    top_p=0.9,
-                    repetition_penalty=1.10,
-                    do_sample=True,
-                    eos_token_id=eos_id,
-                    pad_token_id=pad_id,
-                )
-        gen_ids = output_tokens[0][inputs.input_ids.shape[1]:]
-        reply = tokenizer.decode(gen_ids, skip_special_tokens=True).strip()
-        reply = re.sub(r'<think>[\s\S]*?</think>', '', reply).strip()
-        reply = re.sub(r'<tool_call>[\s\S]*?</tool_call>', '', reply).strip()
-        return reply if reply else "Subagente concluiu a tarefa sem texto adicional."
-    except Exception as e:
-        return f"ERRO na geração do subagente: {str(e)}"
+            gen_ids = output_tokens[0][inputs.input_ids.shape[1]:]
+            reply = tokenizer.decode(gen_ids, skip_special_tokens=True).strip()
+            reply = re.sub(r'<think>[\s\S]*?</think>', '', reply).strip()
+            reply = re.sub(r'<tool_call>[\s\S]*?</tool_call>', '', reply).strip()
+            return reply if reply else "Subagente concluiu a tarefa sem texto adicional."
+        except Exception as e:
+            return f"ERRO na geração do subagente: {str(e)}"
 
 def execute_tool(func_name: str, params: dict) -> str:
     """Executa a ferramenta solicitada pelo modelo com total suporte a sites, agentes, habilidades, arquivos e terminal."""
@@ -718,9 +786,7 @@ def execute_tool(func_name: str, params: dict) -> str:
             if not papel or not instrucoes:
                 return "ERRO: 'papel' e 'instrucoes' são obrigatórios para definir a especialidade do agente."
             
-            safe_name = re.sub(r'[^a-zA-Z0-9_\-]', '_', nome).strip('_')
-            if not safe_name:
-                safe_name = f"agente_{int(time.time())}"
+            safe_name = sanitize_identifier_name(nome, "agente")
             agent_data = {
                 "nome": nome,
                 "papel": papel,
@@ -750,17 +816,17 @@ def execute_tool(func_name: str, params: dict) -> str:
             return "SUBAGENTES ESPECIALIZADOS CADASTRADOS:\n\n" + "\n\n".join(agents)
 
         elif func_name == "invocar_agente":
-            nome = params.get("nome", "").strip()
-            tarefa = params.get("tarefa", "").strip()
+            nome = str(params.get("nome") or "").strip()
+            tarefa = str(params.get("tarefa") or "").strip()
             if not nome or not tarefa:
                 return "ERRO: 'nome' do subagente e 'tarefa' são obrigatórios."
             
-            safe_name = re.sub(r'[^a-zA-Z0-9_\-]', '_', nome)
+            safe_name = sanitize_identifier_name(nome, "agente")
             agent_file = os.path.join(AGENTS_DIR, f"{safe_name}.json")
             
             if not os.path.exists(agent_file) and os.path.exists(AGENTS_DIR):
                 for f in os.listdir(AGENTS_DIR):
-                    if f.lower() == f"{safe_name.lower()}.json":
+                    if f.lower() == f"{safe_name.lower()}.json" or f.lower() == f"{nome.lower()}.json":
                         agent_file = os.path.join(AGENTS_DIR, f)
                         break
             
@@ -773,17 +839,23 @@ def execute_tool(func_name: str, params: dict) -> str:
             
             print(f"\n[🤖 Invocando Subagente]: {agent_info['nome']} | Tarefa: {tarefa[:60]}...")
             
+            qlora_active = bool(SETTINGS.get("enable_qlora", True))
+            if qlora_active:
+                sub_system = f"Você é o subagente autônomo '{agent_info['nome']}'. Seu papel é: {agent_info['papel']}.\nDiretrizes e Regras:\n{agent_info['instrucoes']}\nResponda em Português do Brasil com foco total na tarefa solicitada."
+            else:
+                sub_system = f"You are the autonomous subagent '{agent_info['nome']}'. Your role: {agent_info['papel']}.\nGuidelines and Rules:\n{agent_info['instrucoes']}\nRespond clearly and accurately in English with full focus on the requested task."
+
             sub_msgs = [
                 {
                     "role": "system",
-                    "content": f"Você é o subagente autônomo '{agent_info['nome']}'. Seu papel é: {agent_info['papel']}.\nDiretrizes e Regras:\n{agent_info['instrucoes']}\nResponda em Português do Brasil com foco total na tarefa solicitada."
+                    "content": sub_system
                 },
                 {
                     "role": "user",
                     "content": tarefa
                 }
             ]
-            sub_res = run_direct_generation(sub_msgs, max_tokens=int(SETTINGS.get("max_tokens", 512)))
+            sub_res = run_direct_generation(sub_msgs, max_tokens=int(SETTINGS.get("max_tokens", 512)), use_qlora=qlora_active)
             return f"--- RESPOSTA DO SUBAGENTE '{agent_info['nome']}' ({agent_info['papel']}) ---\n{sub_res}"
 
         elif func_name == "criar_habilidade":
@@ -794,9 +866,7 @@ def execute_tool(func_name: str, params: dict) -> str:
             if not nome or not codigo:
                 return "ERRO: 'nome' e 'codigo' são obrigatórios para criar uma habilidade."
             
-            safe_name = re.sub(r'[^a-zA-Z0-9_\-]', '_', nome).strip('_')
-            if not safe_name:
-                safe_name = f"skill_{int(time.time())}"
+            safe_name = sanitize_identifier_name(nome, "habilidade")
             ext_map = {"python": ".py", "powershell": ".ps1", "batch": ".bat", "cmd": ".bat"}
             ext = ext_map.get(linguagem, ".py")
             
@@ -836,18 +906,19 @@ def execute_tool(func_name: str, params: dict) -> str:
             return "HABILIDADES E AUTOMAÇÕES CADASTRADAS:\n\n" + "\n\n".join(skills)
 
         elif func_name == "executar_habilidade":
-            nome = params.get("nome", "").strip()
-            args = params.get("argumentos", "").strip()
+            nome = str(params.get("nome") or "").strip()
+            args = str(params.get("argumentos") or "").strip()
             if not nome:
                 return "ERRO: 'nome' da habilidade é obrigatório."
             
-            safe_name = re.sub(r'[^a-zA-Z0-9_\-]', '_', nome)
+            safe_name = sanitize_identifier_name(nome, "habilidade")
             meta_path = os.path.join(SKILLS_DIR, f"{safe_name}.json")
             
             if not os.path.exists(meta_path) and os.path.exists(SKILLS_DIR):
                 for f in os.listdir(SKILLS_DIR):
-                    if f.lower() == f"{safe_name.lower()}.json":
+                    if f.lower() == f"{safe_name.lower()}.json" or f.lower() == f"{nome.lower()}.json":
                         meta_path = os.path.join(SKILLS_DIR, f)
+                        break
                         break
             
             if not os.path.exists(meta_path):
@@ -904,24 +975,39 @@ def execute_tool(func_name: str, params: dict) -> str:
                 return f"ERRO: Arquivo '{caminho}' não existe."
             if os.path.isdir(caminho):
                 return f"ERRO: '{caminho}' é uma pasta/diretório, não um arquivo de texto. Use a ferramenta 'listar_arquivos'."
+            
+            file_size = os.path.getsize(caminho)
+            if is_binary_file(caminho):
+                sz_str = f"{file_size} B" if file_size < 1024 else f"{round(file_size/1024, 1)} KB"
+                return f"AVISO: O arquivo '{caminho}' é um arquivo binário ou executável ({sz_str}). Leitura direta em formato de texto não é suportada para evitar corrupção de dados ou caracteres inválidos."
+
+            if file_size > 100 * 1024 * 1024:
+                return f"ERRO: O arquivo '{caminho}' possui {round(file_size/(1024*1024), 1)} MB, excedendo o limite de segurança de 100 MB para leitura em memória."
+
             encodings = ["utf-8", "latin-1", "cp1252"]
             conteudo = None
             for enc in encodings:
                 try:
-                    with open(caminho, "r", encoding=enc) as f:
+                    with open(caminho, "r", encoding=enc, errors="replace") as f:
                         conteudo = f.read(12000)
                     break
-                except UnicodeDecodeError:
+                except Exception:
                     continue
             if conteudo is None:
                 return f"ERRO: Não foi possível decodificar o arquivo '{caminho}'."
-            return f"CONTEÚDO DO ARQUIVO ({caminho}):\n{conteudo}"
+            
+            note = ""
+            if file_size > 12000:
+                note = f"\n\n[... Arquivo com {file_size} bytes. Exibindo os primeiros 12.000 caracteres para preservação da janela de contexto ...]"
+            return f"CONTEÚDO DO ARQUIVO ({caminho}):\n{conteudo}{note}"
 
         elif func_name == "criar_arquivo":
             caminho = str(params.get("caminho") or "").strip()
             conteudo = str(params.get("conteudo") if params.get("conteudo") is not None else "")
             if not caminho:
                 return "ERRO: Parâmetro 'caminho' não informado."
+            if is_protected_system_path(caminho):
+                return f"ERRO DE SEGURANÇA: Criação bloqueada. O caminho '{caminho}' é protegido pelo sistema operacional ou raiz de disco."
             parent = os.path.dirname(caminho)
             if parent:
                 os.makedirs(parent, exist_ok=True)
@@ -935,6 +1021,8 @@ def execute_tool(func_name: str, params: dict) -> str:
             modo = str(params.get("modo") or "anexar").strip().lower()
             if not caminho:
                 return "ERRO: Parâmetro 'caminho' não informado."
+            if is_protected_system_path(caminho):
+                return f"ERRO DE SEGURANÇA: Modificação bloqueada. O caminho '{caminho}' é protegido pelo sistema operacional ou raiz de disco."
             parent = os.path.dirname(caminho)
             if parent:
                 os.makedirs(parent, exist_ok=True)
@@ -948,6 +1036,8 @@ def execute_tool(func_name: str, params: dict) -> str:
             destino = str(params.get("destino") or "").strip()
             if not origem or not destino:
                 return "ERRO: 'origem' e 'destino' são obrigatórios."
+            if is_protected_system_path(origem) or is_protected_system_path(destino):
+                return f"ERRO DE SEGURANÇA: Operação de mover bloqueada em caminho protegido do sistema ou raiz."
             if not os.path.exists(origem):
                 return f"ERRO: Origem '{origem}' não encontrada."
             if os.path.abspath(origem) == os.path.abspath(destino):
@@ -963,6 +1053,8 @@ def execute_tool(func_name: str, params: dict) -> str:
             destino = str(params.get("destino") or "").strip()
             if not origem or not destino:
                 return "ERRO: 'origem' e 'destino' são obrigatórios."
+            if is_protected_system_path(destino):
+                return f"ERRO DE SEGURANÇA: Destino de cópia bloqueado por ser caminho protegido do sistema ou raiz."
             if not os.path.exists(origem):
                 return f"ERRO: Origem '{origem}' não encontrada."
             if os.path.abspath(origem) == os.path.abspath(destino):
@@ -980,6 +1072,8 @@ def execute_tool(func_name: str, params: dict) -> str:
             caminho = str(params.get("caminho") or "").strip()
             if not caminho:
                 return "ERRO: Parâmetro 'caminho' não informado."
+            if is_protected_system_path(caminho):
+                return f"ERRO DE SEGURANÇA: Exclusão bloqueada. O caminho '{caminho}' é protegido pelo sistema operacional ou raiz de disco."
             if not os.path.exists(caminho):
                 return f"ERRO: Arquivo ou pasta '{caminho}' não encontrado."
             if os.path.isdir(caminho):
@@ -1060,16 +1154,38 @@ def execute_tool(func_name: str, params: dict) -> str:
             destino = str(params.get("destino") or "").strip()
             if not url or not destino:
                 return "ERRO: 'url' e 'destino' são obrigatórios."
+            
+            # Validação estrita de protocolo de download
+            url_lower = url.lower()
+            if any(url_lower.startswith(p) for p in ["file:", "ftp:", "data:", "javascript:", "about:"]):
+                return f"ERRO DE SEGURANÇA: Protocolo não permitido na URL '{url}'. Apenas HTTP e HTTPS são suportados para download."
             if not url.startswith("http://") and not url.startswith("https://"):
                 url = "https://" + url
+
+            if is_protected_system_path(destino):
+                return f"ERRO DE SEGURANÇA: Destino de download '{destino}' é protegido pelo sistema operacional ou raiz de disco."
+
             parent = os.path.dirname(destino)
             if parent:
                 os.makedirs(parent, exist_ok=True)
+            
             try:
-                req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+                req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
                 ssl_ctx = ssl._create_unverified_context()
+                MAX_DOWNLOAD_BYTES = 100 * 1024 * 1024  # Limite máximo de 100 MB
+                total_downloaded = 0
                 with urllib.request.urlopen(req, context=ssl_ctx, timeout=30) as resp, open(destino, "wb") as f:
-                    f.write(resp.read())
+                    while True:
+                        chunk = resp.read(65536)
+                        if not chunk:
+                            break
+                        total_downloaded += len(chunk)
+                        if total_downloaded > MAX_DOWNLOAD_BYTES:
+                            f.close()
+                            if os.path.exists(destino):
+                                os.remove(destino)
+                            return f"ERRO: Download cancelado. O arquivo excedeu o limite máximo seguro de {MAX_DOWNLOAD_BYTES // (1024*1024)} MB."
+                        f.write(chunk)
                 return f"SUCESSO: Arquivo baixado da internet e salvo em '{destino}' ({os.path.getsize(destino)} bytes)."
             except urllib.error.HTTPError as he:
                 return f"ERRO ao baixar '{url}': HTTP {he.code} {he.reason}"
@@ -1080,6 +1196,11 @@ def execute_tool(func_name: str, params: dict) -> str:
             caminho = str(params.get("caminho_ou_url") or "").strip()
             if not caminho:
                 return "ERRO: 'caminho_ou_url' não informado."
+            
+            c_low = caminho.lower()
+            if any(c_low.startswith(p) for p in ["javascript:", "data:", "vbscript:"]):
+                return f"ERRO DE SEGURANÇA: Protocolo não permitido em '{caminho}'."
+
             print(f"\n[🚀 Abrir no Windows]: {caminho}")
             try:
                 is_url = caminho.startswith("http://") or caminho.startswith("https://")
@@ -2917,13 +3038,17 @@ async def chat_stream_endpoint(req: ChatRequest):
                     pad_token_id=pad_id,
                 )
 
-                # Executa geração em thread dedicada
+                # Executa geração em thread dedicada com captura de exceções
+                gen_error = []
                 def thread_gen(kwargs, use_adapter):
-                    if is_lora and not use_adapter:
-                        with model.disable_adapter():
+                    try:
+                        if is_lora and not use_adapter:
+                            with model.disable_adapter():
+                                model.generate(**kwargs)
+                        else:
                             model.generate(**kwargs)
-                    else:
-                        model.generate(**kwargs)
+                    except Exception as ge:
+                        gen_error.append(str(ge))
 
                 gen_thread = threading.Thread(target=thread_gen, args=(gen_kwargs, enable_qlora))
                 gen_thread.start()
@@ -2997,7 +3122,16 @@ async def chat_stream_endpoint(req: ChatRequest):
 
                     await asyncio.sleep(0.001)
 
-                gen_thread.join()
+                gen_thread.join(timeout=30.0)
+
+                if gen_error:
+                    err_msg = f" [ERRO NA GERAÇÃO: {gen_error[0]}]"
+                    yield f"data: {json.dumps({'type': 'token', 'token': err_msg})}\n\n"
+                    full_reply += err_msg
+
+                if in_think:
+                    in_think = False
+                    yield f"data: {json.dumps({'type': 'think_token', 'token': '\n[Raciocínio truncado pelo limite de tokens]\n'})}\n\n"
 
                 # Verificar se houve chamada de ferramenta
                 tool_call = parse_tool_call(full_reply)
@@ -3152,11 +3286,15 @@ def chat_endpoint(req: ChatRequest):
                 if "<|im_end|>" in reply_raw:
                     reply_raw = reply_raw.split("<|im_end|>")[0].strip()
 
-                if "<think>" in reply_raw and "</think>" in reply_raw:
+                if "<think>" in reply_raw:
                     th_start = reply_raw.find("<think>") + 7
-                    th_end = reply_raw.find("</think>")
-                    extracted_thought = reply_raw[th_start:th_end].strip()
-                    reply_after_think = reply_raw[th_end + 8:].strip()
+                    if "</think>" in reply_raw:
+                        th_end = reply_raw.find("</think>")
+                        extracted_thought = reply_raw[th_start:th_end].strip()
+                        reply_after_think = reply_raw[th_end + 8:].strip()
+                    else:
+                        extracted_thought = reply_raw[th_start:].strip() + " [Raciocínio truncado pelo limite de tokens]"
+                        reply_after_think = "[Raciocínio concluído preliminarmente devido ao teto de tokens da resposta.]"
                 else:
                     reply_after_think = reply_raw
 
