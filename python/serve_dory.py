@@ -50,6 +50,9 @@ os.makedirs(AGENTS_DIR, exist_ok=True)
 os.makedirs(SKILLS_DIR, exist_ok=True)
 
 DEFAULT_SETTINGS = {
+    # 🇧🇷 Adaptação QLoRA (Português BR)
+    "enable_qlora": True,
+
     # ⏱ Contexto e desempenho (LM Bionic)
     "auto_optimize": True,
     "context_length": 32768,
@@ -136,50 +139,67 @@ print(f"  Janela de Contexto: {SETTINGS.get('context_window', 4096)} tokens")
 print(f"  Hardware:           {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU'}")
 print("=" * 65)
 
-if os.path.exists(MODEL_PATH):
-    load_path = MODEL_PATH
-    is_lora = False
-    print(f"\nCarregando modelo mesclado consolidado de: {load_path}")
-elif os.path.exists(LORA_PATH):
-    load_path = LORA_PATH
-    is_lora = True
-    print(f"\nCarregando modelo base + adaptadores LoRA de: {load_path}")
-else:
-    print("\n[ERRO FATAL] Nenhum modelo encontrado em 'models/'. Execute 'git lfs pull'.")
-    sys.exit(1)
+def find_base_model_path():
+    cache_base = os.path.expanduser("~/.cache/huggingface/hub/models--nvidia--NVIDIA-Nemotron-Labs-Dory1.0-4B-BF16/snapshots")
+    if os.path.exists(cache_base):
+        snapshots = [os.path.join(cache_base, d) for d in os.listdir(cache_base) if os.path.isdir(os.path.join(cache_base, d))]
+        if snapshots:
+            return snapshots[0]
+    return BASE_MODEL_ID
 
-tokenizer = AutoTokenizer.from_pretrained(load_path, trust_remote_code=True)
-config_dict = json.load(open(os.path.join(load_path, "config.json"), "r", encoding="utf-8"))
+is_lora = False
+base_loc = find_base_model_path()
 
-config_dict["n_recurrent_loops"] = int(SETTINGS.get("n_recurrent_loops", 2))
-config = DoryConfig(**config_dict)
+if os.path.exists(LORA_PATH) and (os.path.exists(base_loc) or "nvidia" in base_loc):
+    try:
+        print(f"\nCarregando modelo base ({base_loc}) + adaptador QLoRA ({LORA_PATH})...")
+        base_cfg_path = os.path.join(base_loc, "config.json") if os.path.exists(os.path.join(base_loc, "config.json")) else os.path.join(MODEL_PATH, "config.json")
+        config_dict = json.load(open(base_cfg_path, "r", encoding="utf-8"))
+        config_dict["n_recurrent_loops"] = int(SETTINGS.get("n_recurrent_loops", 2))
+        config = DoryConfig(**config_dict)
+
+        tokenizer = AutoTokenizer.from_pretrained(
+            LORA_PATH if os.path.exists(os.path.join(LORA_PATH, "tokenizer.json")) else base_loc,
+            trust_remote_code=True,
+        )
+
+        from peft import PeftModel
+        base = DoryForCausalLM.from_pretrained(
+            base_loc,
+            config=config,
+            torch_dtype=torch.bfloat16,
+            device_map="cuda" if torch.cuda.is_available() else "cpu",
+        )
+        model = PeftModel.from_pretrained(base, LORA_PATH)
+        is_lora = True
+        print("✓ Modelo base carregado com adaptador QLoRA dinâmico (ativação/desativação habilitada)!")
+    except Exception as e:
+        print(f"[AVISO] Falha ao carregar PeftModel: {e}. Alternando para modelo consolidado...")
+        is_lora = False
 
 if not is_lora:
+    if os.path.exists(MODEL_PATH):
+        load_path = MODEL_PATH
+    elif os.path.exists(LORA_PATH):
+        load_path = LORA_PATH
+    else:
+        print("\n[ERRO FATAL] Nenhum modelo encontrado em 'models/'. Execute 'git lfs pull'.")
+        sys.exit(1)
+
+    print(f"\nCarregando modelo mesclado consolidado de: {load_path}")
+    tokenizer = AutoTokenizer.from_pretrained(load_path, trust_remote_code=True)
+    config_dict = json.load(open(os.path.join(load_path, "config.json"), "r", encoding="utf-8"))
+    config_dict["n_recurrent_loops"] = int(SETTINGS.get("n_recurrent_loops", 2))
+    config = DoryConfig(**config_dict)
     model = DoryForCausalLM.from_pretrained(
         load_path,
         config=config,
         torch_dtype=torch.bfloat16,
         device_map="cuda" if torch.cuda.is_available() else "cpu",
     )
-else:
-    from peft import PeftModel
-    from transformers import BitsAndBytesConfig
-    bnb_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_compute_dtype=torch.bfloat16,
-    )
-    base = DoryForCausalLM.from_pretrained(
-        BASE_MODEL_ID,
-        config=config,
-        quantization_config=bnb_config,
-        device_map="cuda",
-        torch_dtype=torch.bfloat16,
-    )
-    model = PeftModel.from_pretrained(base, load_path)
 
 model.eval()
-print(f"✓ Dory 1.0 4B carregado com sucesso na memória! ({config.n_recurrent_loops} loops ativos)\n")
+print(f"✓ Dory 1.0 4B carregado com sucesso na memória! ({config.n_recurrent_loops} loops ativos | QLoRA dinâmico: {'Sim' if is_lora else 'Fixo'})\n")
 
 # Lock para sincronizar gerações concorrentes na GPU
 generation_lock = threading.Lock()
@@ -564,10 +584,15 @@ TOOLS_DEFINITIONS = [
     }
 ]
 
-SYSTEM_AGENT_PROMPT = """Você é o Agente Dory 4B, um assistente autônomo, prestativo e inteligente em Português do Brasil.
+SYSTEM_AGENT_PROMPT_PTBR = """Você é o Agente Dory 4B, um assistente autônomo, prestativo e inteligente em Português do Brasil.
 Você executa tarefas no computador e responde com clareza, empatia e em bom português. Para saudações e dúvidas cotidianas, responda diretamente em português sem abrir blocos vazios de código."""
 
-def run_direct_generation(messages: list, max_tokens: int = 512) -> str:
+SYSTEM_AGENT_PROMPT_EN = """You are Dory 4B Agent, a helpful, precise and intelligent AI assistant.
+Answer questions directly with clarity and accuracy without opening empty code blocks."""
+
+SYSTEM_AGENT_PROMPT = SYSTEM_AGENT_PROMPT_PTBR
+
+def run_direct_generation(messages: list, max_tokens: int = 512, use_qlora: bool = True) -> str:
     """Executa inferência direta e limpa no Dory (usado para subagentes e tarefas focadas)."""
     try:
         prompt = tokenizer.apply_chat_template(
@@ -580,16 +605,29 @@ def run_direct_generation(messages: list, max_tokens: int = 512) -> str:
         eos_id = tokenizer.eos_token_id if tokenizer.eos_token_id is not None else 11
         pad_id = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else eos_id
         with torch.no_grad():
-            output_tokens = model.generate(
-                **inputs,
-                max_new_tokens=max_tokens,
-                temperature=0.6,
-                top_p=0.9,
-                repetition_penalty=1.10,
-                do_sample=True,
-                eos_token_id=eos_id,
-                pad_token_id=pad_id,
-            )
+            if is_lora and not use_qlora:
+                with model.disable_adapter():
+                    output_tokens = model.generate(
+                        **inputs,
+                        max_new_tokens=max_tokens,
+                        temperature=0.6,
+                        top_p=0.9,
+                        repetition_penalty=1.10,
+                        do_sample=True,
+                        eos_token_id=eos_id,
+                        pad_token_id=pad_id,
+                    )
+            else:
+                output_tokens = model.generate(
+                    **inputs,
+                    max_new_tokens=max_tokens,
+                    temperature=0.6,
+                    top_p=0.9,
+                    repetition_penalty=1.10,
+                    do_sample=True,
+                    eos_token_id=eos_id,
+                    pad_token_id=pad_id,
+                )
         gen_ids = output_tokens[0][inputs.input_ids.shape[1]:]
         reply = tokenizer.decode(gen_ids, skip_special_tokens=True).strip()
         reply = re.sub(r'<think>[\s\S]*?</think>', '', reply).strip()
@@ -1210,6 +1248,9 @@ HTML_PAGE = r"""<!DOCTYPE html>
         .subtitle { font-size: 0.72rem; color: var(--text-dim); }
         .status-badges { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
         .badge { font-size: 0.72rem; font-weight: 600; padding: 4px 8px; border-radius: 9999px; display: inline-flex; align-items: center; gap: 5px; }
+        .badge-qlora { background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.35); cursor: pointer; transition: all 0.2s; user-select: none; }
+        .badge-qlora:hover { filter: brightness(1.2); }
+        .badge-qlora.disabled { background: rgba(148, 163, 184, 0.1); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.25); }
         .badge-gpu { background: rgba(16, 185, 129, 0.12); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
         .badge-loops { background: rgba(56, 189, 248, 0.12); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); }
         .badge-speed { background: rgba(245, 158, 11, 0.12); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
@@ -1335,6 +1376,7 @@ HTML_PAGE = r"""<!DOCTYPE html>
             </div>
         </div>
         <div class="status-badges">
+            <span class="badge badge-qlora" id="badge-qlora" onclick="toggleQloraFast()" title="Clique para ativar/desativar o QLoRA em Português instantaneamente">🇧🇷 QLoRA: Ativo</span>
             <span class="badge badge-gpu" id="badge-gpu">● GPU Ativa</span>
             <span class="badge badge-vram" id="badge-vram">💾 VRAM: --</span>
             <span class="badge badge-loops" id="badge-loops">⚡ 2 Loops</span>
@@ -1669,6 +1711,30 @@ HTML_PAGE = r"""<!DOCTYPE html>
                         </div>
                     </div>
                 </div>
+
+                <!-- 5. Adaptador QLoRA PT-BR -->
+                <div class="settings-card">
+                    <div class="settings-card-header">
+                        <span>🇧🇷 Adaptador QLoRA (Português)</span>
+                    </div>
+                    <div class="settings-card-body">
+                        <div class="setting-row">
+                            <div class="setting-label-area">
+                                <div class="setting-label">
+                                    <span>Ativar QLoRA em Português</span>
+                                    <span class="help-icon" title="Ativa ou desativa o adaptador QLoRA treinado em Português. Quando desativado, o modelo responde no formato nativo base sem recarregar o modelo na memória.">?</span>
+                                </div>
+                                <div style="font-size:0.75rem; color:var(--text-dim); margin-top:2px;">
+                                    Permite alternar instantaneamente entre o modelo adaptado em Português e o modelo base original.
+                                </div>
+                            </div>
+                            <label class="switch">
+                                <input type="checkbox" id="cfg-enable-qlora" checked>
+                                <span class="slider-round"></span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div class="modal-footer">
@@ -1723,12 +1789,40 @@ HTML_PAGE = r"""<!DOCTYPE html>
         // GERENCIAMENTO DE ABAS E HISTÓRICO
         // ==========================================
 
+        function updateQloraBadge(enabled) {
+            const badge = document.getElementById('badge-qlora');
+            if (!badge) return;
+            if (enabled) {
+                badge.className = 'badge badge-qlora';
+                badge.innerText = '🇧🇷 QLoRA: Ativo';
+                badge.title = 'QLoRA em Português ativo. Clique para desativar e usar modelo base.';
+            } else {
+                badge.className = 'badge badge-qlora disabled';
+                badge.innerText = '⚪ QLoRA: Desativado';
+                badge.title = 'QLoRA desativado (modelo base ativo). Clique para ativar QLoRA em Português.';
+            }
+        }
+
+        async function toggleQloraFast() {
+            try {
+                const res = await fetch('/api/settings/toggle_qlora', { method: 'POST' });
+                const data = await res.json();
+                currentSettings.enable_qlora = data.enable_qlora;
+                updateQloraBadge(data.enable_qlora);
+                const modalToggle = document.getElementById('cfg-enable-qlora');
+                if (modalToggle) modalToggle.checked = data.enable_qlora;
+            } catch (e) {
+                console.error("Erro ao alternar QLoRA:", e);
+            }
+        }
+
         async function loadSettingsFromServer() {
             try {
                 const res = await fetch('/api/settings');
                 currentSettings = await res.json();
                 const loops = currentSettings.n_recurrent_loops || 2;
                 document.getElementById('badge-loops').innerText = `⚡ ${loops} Loops`;
+                updateQloraBadge(currentSettings.enable_qlora !== false);
                 populateSettingsModal(currentSettings);
             } catch (e) {
                 console.error("Erro ao carregar settings:", e);
@@ -1948,7 +2042,8 @@ Como posso te ajudar agora?</div>
                         chat_id: currentChatId,
                         messages: cur.messages,
                         enable_thinking: currentSettings.thinking_mode !== 'off',
-                        temperature: parseFloat(currentSettings.temperature) || 0.65
+                        temperature: parseFloat(currentSettings.temperature) || 0.65,
+                        enable_qlora: currentSettings.enable_qlora !== false
                     })
                 });
 
@@ -2376,6 +2471,10 @@ Como posso te ajudar agora?</div>
             document.getElementById('cfg-offload-kv').checked = s.offload_kv_cache_gpu !== false;
             document.getElementById('cfg-unified-kv').checked = s.unified_kv_cache !== false;
             document.getElementById('cfg-context-checkpoints').value = s.context_checkpoints || 32;
+
+            // 5. QLoRA
+            const qloraEl = document.getElementById('cfg-enable-qlora');
+            if (qloraEl) qloraEl.checked = s.enable_qlora !== false;
         }
 
         function resetSettingsToDefaults() {
@@ -2400,7 +2499,8 @@ Como posso te ajudar agora?</div>
                 n_recurrent_loops: 2,
                 offload_kv_cache_gpu: true,
                 unified_kv_cache: true,
-                context_checkpoints: 32
+                context_checkpoints: 32,
+                enable_qlora: true
             });
         }
 
@@ -2439,6 +2539,9 @@ Como posso te ajudar agora?</div>
                 offload_kv_cache_gpu: document.getElementById('cfg-offload-kv').checked,
                 unified_kv_cache: document.getElementById('cfg-unified-kv').checked,
                 context_checkpoints: parseInt(document.getElementById('cfg-context-checkpoints').value) || 32,
+
+                // QLoRA
+                enable_qlora: document.getElementById('cfg-enable-qlora') ? document.getElementById('cfg-enable-qlora').checked : true
             };
 
             try {
@@ -2449,6 +2552,7 @@ Como posso te ajudar agora?</div>
                 });
                 currentSettings = await res.json();
                 document.getElementById('badge-loops').innerText = `⚡ ${currentSettings.n_recurrent_loops} Loops`;
+                updateQloraBadge(currentSettings.enable_qlora !== false);
                 closeSettingsModal();
             } catch (e) {
                 alert("Erro ao salvar configurações no servidor: " + e.message);
@@ -2471,6 +2575,7 @@ class ChatRequest(BaseModel):
     enable_thinking: Optional[bool] = False
     temperature: Optional[float] = 0.65
     max_tokens: Optional[int] = None
+    enable_qlora: Optional[bool] = None
 
 @app.get("/", response_class=HTMLResponse)
 def index():
@@ -2484,6 +2589,14 @@ def favicon():
 @app.get("/api/settings")
 def get_settings():
     return load_settings()
+
+@app.post("/api/settings/toggle_qlora")
+def toggle_qlora_api():
+    global SETTINGS
+    curr = bool(SETTINGS.get("enable_qlora", True))
+    SETTINGS["enable_qlora"] = not curr
+    save_settings(SETTINGS)
+    return {"enable_qlora": SETTINGS["enable_qlora"]}
 
 @app.post("/api/settings")
 def update_settings(payload: Dict[str, Any]):
@@ -2569,8 +2682,11 @@ async def chat_stream_endpoint(req: ChatRequest):
     """Transmite a resposta gerada token a token via Server-Sent Events (SSE)."""
     raw_msgs = [{"role": m["role"], "content": m["content"]} for m in req.messages]
     
+    enable_qlora = req.enable_qlora if req.enable_qlora is not None else bool(SETTINGS.get("enable_qlora", True))
+    sys_prompt = SYSTEM_AGENT_PROMPT_PTBR if enable_qlora else SYSTEM_AGENT_PROMPT_EN
+
     if not any(m["role"] == "system" for m in raw_msgs):
-        current_msgs = [{"role": "system", "content": SYSTEM_AGENT_PROMPT}] + raw_msgs
+        current_msgs = [{"role": "system", "content": sys_prompt}] + raw_msgs
     else:
         current_msgs = list(raw_msgs)
 
@@ -2694,7 +2810,14 @@ async def chat_stream_endpoint(req: ChatRequest):
                 )
 
                 # Executa geração em thread dedicada
-                gen_thread = threading.Thread(target=model.generate, kwargs=gen_kwargs)
+                def thread_gen(kwargs, use_adapter):
+                    if is_lora and not use_adapter:
+                        with model.disable_adapter():
+                            model.generate(**kwargs)
+                    else:
+                        model.generate(**kwargs)
+
+                gen_thread = threading.Thread(target=thread_gen, args=(gen_kwargs, enable_qlora))
                 gen_thread.start()
 
                 full_reply = ""
@@ -2809,8 +2932,11 @@ def chat_endpoint(req: ChatRequest):
     with generation_lock:
         raw_msgs = [{"role": m["role"], "content": m["content"]} for m in req.messages]
         
+        enable_qlora = req.enable_qlora if req.enable_qlora is not None else bool(SETTINGS.get("enable_qlora", True))
+        sys_prompt = SYSTEM_AGENT_PROMPT_PTBR if enable_qlora else SYSTEM_AGENT_PROMPT_EN
+
         if not any(m["role"] == "system" for m in raw_msgs):
-            current_msgs = [{"role": "system", "content": SYSTEM_AGENT_PROMPT}] + raw_msgs
+            current_msgs = [{"role": "system", "content": sys_prompt}] + raw_msgs
         else:
             current_msgs = list(raw_msgs)
 
@@ -2877,17 +3003,31 @@ def chat_endpoint(req: ChatRequest):
                 max_new = req.max_tokens or int(SETTINGS.get("max_tokens", 512))
 
                 with torch.no_grad():
-                    output_tokens = model.generate(
-                        **inputs,
-                        streamer=streamer,
-                        max_new_tokens=max_new,
-                        temperature=req.temperature or float(SETTINGS.get("temperature", 0.65)),
-                        top_p=float(SETTINGS.get("top_p", 0.9)),
-                        repetition_penalty=float(SETTINGS.get("repetition_penalty", 1.10)),
-                        do_sample=True,
-                        eos_token_id=eos_id,
-                        pad_token_id=pad_id,
-                    )
+                    if is_lora and not enable_qlora:
+                        with model.disable_adapter():
+                            output_tokens = model.generate(
+                                **inputs,
+                                streamer=streamer,
+                                max_new_tokens=max_new,
+                                temperature=req.temperature or float(SETTINGS.get("temperature", 0.65)),
+                                top_p=float(SETTINGS.get("top_p", 0.9)),
+                                repetition_penalty=float(SETTINGS.get("repetition_penalty", 1.10)),
+                                do_sample=True,
+                                eos_token_id=eos_id,
+                                pad_token_id=pad_id,
+                            )
+                    else:
+                        output_tokens = model.generate(
+                            **inputs,
+                            streamer=streamer,
+                            max_new_tokens=max_new,
+                            temperature=req.temperature or float(SETTINGS.get("temperature", 0.65)),
+                            top_p=float(SETTINGS.get("top_p", 0.9)),
+                            repetition_penalty=float(SETTINGS.get("repetition_penalty", 1.10)),
+                            do_sample=True,
+                            eos_token_id=eos_id,
+                            pad_token_id=pad_id,
+                        )
 
                 gen_ids = output_tokens[0][inputs.input_ids.shape[1]:]
                 total_gen_tokens += len(gen_ids)
